@@ -6,6 +6,8 @@ export function LayerControls() {
   const satellites = useAppStore((s) => s.satellites);
   const aircraft = useAppStore((s) => s.aircraft);
   const vessels = useAppStore((s) => s.vessels);
+  const autoRotate = useAppStore((s) => s.autoRotate);
+  const setAutoRotate = useAppStore((s) => s.setAutoRotate);
 
   const buttons = [
     {
@@ -30,6 +32,8 @@ export function LayerControls() {
       icon: '🚢',
     },
   ];
+
+  const rotateColor = '#a78bfa';
 
   return (
     <div
@@ -87,6 +91,30 @@ export function LayerControls() {
           </span>
         </button>
       ))}
+
+      <div style={{ borderTop: '1px solid rgba(255,255,255,0.08)', marginTop: 4, paddingTop: 8 }}>
+        <button
+          onClick={() => setAutoRotate(!autoRotate)}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            padding: '8px 12px',
+            borderRadius: 8,
+            border: `1px solid ${autoRotate ? rotateColor + '66' : 'rgba(255,255,255,0.1)'}`,
+            background: autoRotate ? rotateColor + '22' : 'transparent',
+            color: autoRotate ? rotateColor : 'rgba(255,255,255,0.4)',
+            cursor: 'pointer',
+            fontSize: 13,
+            transition: 'all 0.15s',
+            minWidth: 160,
+            width: '100%',
+          }}
+        >
+          <span style={{ fontSize: 16 }}>{autoRotate ? '⟳' : '⏸'}</span>
+          <span style={{ flex: 1, textAlign: 'left', fontWeight: 500 }}>Rotation</span>
+        </button>
+      </div>
     </div>
   );
 }

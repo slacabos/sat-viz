@@ -38,6 +38,8 @@ const GlobeView = memo(function GlobeView() {
   const aircraft = useAppStore((s) => s.aircraft);
   const vessels = useAppStore((s) => s.vessels);
   const setSelectedObject = useAppStore((s) => s.setSelectedObject);
+  const autoRotate = useAppStore((s) => s.autoRotate);
+  const setAutoRotate = useAppStore((s) => s.setAutoRotate);
 
   // Resize observer
   useEffect(() => {
@@ -48,13 +50,22 @@ const GlobeView = memo(function GlobeView() {
     return () => ro.disconnect();
   }, []);
 
-  // Auto-rotate
+  // Sync autoRotate store value → OrbitControls
   useEffect(() => {
-    if (globeRef.current) {
-      globeRef.current.controls().autoRotate = true;
-      globeRef.current.controls().autoRotateSpeed = 0.3;
-    }
-  }, []);
+    const ctrl = globeRef.current?.controls();
+    if (!ctrl) return;
+    ctrl.autoRotate = autoRotate;
+    ctrl.autoRotateSpeed = 0.3;
+  }, [autoRotate]);
+
+  // Stop rotation when user starts dragging the globe
+  useEffect(() => {
+    const ctrl = globeRef.current?.controls();
+    if (!ctrl) return;
+    const stop = () => setAutoRotate(false);
+    ctrl.addEventListener('start', stop);
+    return () => ctrl.removeEventListener('start', stop);
+  }, [setAutoRotate]);
 
   const visibleSatellites = useMemo(
     () => (layers.satellites ? satellites : []),
@@ -105,6 +116,7 @@ const GlobeView = memo(function GlobeView() {
 
   const handleObjectClick = useCallback(
     (obj: object) => {
+      setAutoRotate(false);
       const d = obj as CombinedObject;
       if (d._type === 'aircraft') {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -116,14 +128,15 @@ const GlobeView = memo(function GlobeView() {
         setSelectedObject({ type: 'vessel', data: data as VesselPosition });
       }
     },
-    [setSelectedObject]
+    [setSelectedObject, setAutoRotate]
   );
 
   const handlePointClick = useCallback(
     (point: object) => {
+      setAutoRotate(false);
       setSelectedObject({ type: 'satellite', data: point as SatellitePosition });
     },
-    [setSelectedObject]
+    [setSelectedObject, setAutoRotate]
   );
 
   const getSatColor = useCallback((d: object) => {

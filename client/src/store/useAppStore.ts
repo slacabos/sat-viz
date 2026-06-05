@@ -36,6 +36,9 @@ interface AppState {
 
   wsStatus: 'connecting' | 'connected' | 'disconnected';
   setWsStatus: (s: 'connecting' | 'connected' | 'disconnected') => void;
+
+  autoRotate: boolean;
+  setAutoRotate: (v: boolean) => void;
 }
 
 export const useAppStore = create<AppState>((set) => {
@@ -74,5 +77,8 @@ export const useAppStore = create<AppState>((set) => {
 
     wsStatus: 'disconnected',
     setWsStatus: (s) => set({ wsStatus: s }),
+
+    autoRotate: true,
+    setAutoRotate: (v) => set({ autoRotate: v }),
   };
 });
