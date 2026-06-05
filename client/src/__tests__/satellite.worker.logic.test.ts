@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import * as satellite from 'satellite.js';
+import {
+  degreesLat,
+  degreesLong,
+  eciToGeodetic,
+  gstime,
+  propagate,
+  twoline2satrec,
+  type EciVec3,
+} from '../lib/satellite';
 
 // Tests the core satellite.js logic used in the worker without needing the worker itself.
 
@@ -8,23 +16,25 @@ const ISS_LINE2 = '2 25544  51.6401 215.0481 0004986 310.8137 197.0690 15.498137
 
 describe('satellite.js propagation', () => {
   it('parses ISS TLE without error', () => {
-    const satrec = satellite.twoline2satrec(ISS_LINE1, ISS_LINE2);
+    const satrec = twoline2satrec(ISS_LINE1, ISS_LINE2);
     expect(satrec.error).toBe(0);
   });
 
   it('propagates ISS position to a valid geodetic coordinate', () => {
-    const satrec = satellite.twoline2satrec(ISS_LINE1, ISS_LINE2);
+    const satrec = twoline2satrec(ISS_LINE1, ISS_LINE2);
     const date = new Date('2024-06-04T12:00:00Z');
-    const posVel = satellite.propagate(satrec, date);
+    const posVel = propagate(satrec, date);
 
+    expect(posVel).not.toBeNull();
+    if (!posVel) throw new Error('Expected propagation result');
     expect(typeof posVel.position).not.toBe('boolean');
-    const pos = posVel.position as satellite.EciVec3<number>;
+    const pos = posVel.position as EciVec3<number>;
 
-    const gmst = satellite.gstime(date);
-    const geo = satellite.eciToGeodetic(pos, gmst);
+    const gmst = gstime(date);
+    const geo = eciToGeodetic(pos, gmst);
 
-    const lat = satellite.degreesLat(geo.latitude);
-    const lng = satellite.degreesLong(geo.longitude);
+    const lat = degreesLat(geo.latitude);
+    const lng = degreesLong(geo.longitude);
     const altKm = geo.height;
 
     expect(lat).toBeGreaterThanOrEqual(-90);
@@ -37,8 +47,8 @@ describe('satellite.js propagation', () => {
   });
 
   it('propagate does not throw on bad input — returns a result object', () => {
-    const satrec = satellite.twoline2satrec(ISS_LINE1, ISS_LINE2);
+    const satrec = twoline2satrec(ISS_LINE1, ISS_LINE2);
     // Passing a date far outside the TLE epoch causes degraded accuracy but should not throw
-    expect(() => satellite.propagate(satrec, new Date('2000-01-01'))).not.toThrow();
+    expect(() => propagate(satrec, new Date('2000-01-01'))).not.toThrow();
   });
 });

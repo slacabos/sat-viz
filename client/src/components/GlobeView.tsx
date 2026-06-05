@@ -150,7 +150,7 @@ const GlobeView = memo(function GlobeView() {
         pointsData={visibleSatellites}
         pointLat="lat"
         pointLng="lng"
-        pointAltitude={(d) => altitudeScale((d as SatellitePosition).altKm)}
+        pointAltitude={(d: object) => altitudeScale((d as SatellitePosition).altKm)}
         pointColor={getSatColor}
         pointRadius={0.25}
         pointResolution={4}

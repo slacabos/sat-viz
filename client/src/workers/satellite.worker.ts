@@ -1,4 +1,13 @@
-import * as satellite from 'satellite.js';
+import {
+  degreesLat,
+  degreesLong,
+  eciToGeodetic,
+  gstime,
+  propagate,
+  twoline2satrec,
+  type EciVec3,
+  type SatRec,
+} from '../lib/satellite';
 import type { TLERecord, SatellitePosition } from '../types/satellite';
 
 type InMsg = { type: 'start' } | { type: 'stop' };
@@ -12,7 +21,7 @@ const PROPAGATE_INTERVAL_MS = 10_000;
 const TLE_REFRESH_INTERVAL_MS = 2 * 60 * 60 * 1000;
 
 interface SatRecord {
-  satrec: satellite.SatRec;
+  satrec: SatRec;
   name: string;
   id: number;
   inclination: number;
@@ -35,7 +44,7 @@ async function fetchTLEs() {
     records = data
       .map((r) => {
         try {
-          const satrec = satellite.twoline2satrec(r.TLE_LINE1, r.TLE_LINE2);
+          const satrec = twoline2satrec(r.TLE_LINE1, r.TLE_LINE2);
           if (satrec.error !== 0) return null;
           return {
             satrec,
@@ -62,14 +71,14 @@ function propagateAll() {
 
   for (const rec of records) {
     try {
-      const posVel = satellite.propagate(rec.satrec, date);
-      if (typeof posVel.position === 'boolean') continue;
+      const posVel = propagate(rec.satrec, date);
+      if (!posVel || typeof posVel.position === 'boolean') continue;
 
-      const gmst = satellite.gstime(date);
-      const geo = satellite.eciToGeodetic(posVel.position as satellite.EciVec3<number>, gmst);
+      const gmst = gstime(date);
+      const geo = eciToGeodetic(posVel.position as EciVec3<number>, gmst);
 
-      const lat = satellite.degreesLat(geo.latitude);
-      const lng = satellite.degreesLong(geo.longitude);
+      const lat = degreesLat(geo.latitude);
+      const lng = degreesLong(geo.longitude);
       const altKm = geo.height;
 
       if (isNaN(lat) || isNaN(lng) || isNaN(altKm)) continue;
