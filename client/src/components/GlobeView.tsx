@@ -16,9 +16,15 @@ const AIRCRAFT_MAT = new THREE.MeshLambertMaterial({ color: COLORS.aircraft });
 const VESSEL_GEO = new THREE.BoxGeometry(0.5, 0.2, 0.9);
 const VESSEL_MAT = new THREE.MeshLambertMaterial({ color: COLORS.vessel });
 
+const SAT_GEO = new THREE.SphereGeometry(0.4, 6, 4);
+const SAT_MAT_LEO = new THREE.MeshLambertMaterial({ color: COLORS.satellite }); // cyan
+const SAT_MAT_MEO = new THREE.MeshLambertMaterial({ color: '#818cf8' }); // indigo
+const SAT_MAT_GEO = new THREE.MeshLambertMaterial({ color: '#fbbf24' }); // gold
+
 type CombinedObject =
   | (AircraftState & { _type: 'aircraft' })
-  | (VesselPosition & { _type: 'vessel' });
+  | (VesselPosition & { _type: 'vessel' })
+  | (SatellitePosition & { _type: 'satellite' });
 
 function makeAircraftMesh(): THREE.Mesh {
   return new THREE.Mesh(AIRCRAFT_GEO, AIRCRAFT_MAT);
@@ -26,6 +32,11 @@ function makeAircraftMesh(): THREE.Mesh {
 
 function makeVesselMesh(): THREE.Mesh {
   return new THREE.Mesh(VESSEL_GEO, VESSEL_MAT);
+}
+
+function makeSatelliteMesh(altKm: number): THREE.Mesh {
+  const mat = altKm >= 35000 ? SAT_MAT_GEO : altKm >= 2000 ? SAT_MAT_MEO : SAT_MAT_LEO;
+  return new THREE.Mesh(SAT_GEO, mat);
 }
 
 const GlobeView = memo(function GlobeView() {
@@ -67,12 +78,6 @@ const GlobeView = memo(function GlobeView() {
     return () => ctrl.removeEventListener('start', stop);
   }, [setAutoRotate]);
 
-  const visibleSatellites = useMemo(
-    () => (layers.satellites ? satellites : []),
-    [layers.satellites, satellites]
-  );
-
-  // Combine aircraft + vessels into one objectsData array
   const combinedObjects = useMemo<CombinedObject[]>(() => {
     const result: CombinedObject[] = [];
     if (layers.aircraft) {
@@ -87,8 +92,13 @@ const GlobeView = memo(function GlobeView() {
         result.push({ ...v, _type: 'vessel' });
       });
     }
+    if (layers.satellites) {
+      satellites.forEach((s) => {
+        result.push({ ...s, _type: 'satellite' });
+      });
+    }
     return result;
-  }, [layers.aircraft, layers.vessels, aircraft, vessels]);
+  }, [layers.aircraft, layers.vessels, layers.satellites, aircraft, vessels, satellites]);
 
   const getObjectAlt = useCallback((d: object) => {
     const obj = d as CombinedObject;
@@ -96,22 +106,32 @@ const GlobeView = memo(function GlobeView() {
       const alt = obj.baroAltitude ?? obj.geoAltitude ?? 10000;
       return altitudeScale(alt / 1000);
     }
-    return altitudeScale(0.05); // vessels at sea level + tiny offset
+    if (obj._type === 'satellite') {
+      if (obj.altKm >= 35000) return 0.14; // GEO shell
+      if (obj.altKm >= 2000) return 0.06; // MEO shell
+      return 0.02; // LEO shell
+    }
+    return altitudeScale(0.05); // vessels
   }, []);
 
   const getObjectLat = useCallback((d: object) => {
     const obj = d as CombinedObject;
-    return obj._type === 'aircraft' ? (obj.lat ?? 0) : obj.lat;
+    if (obj._type === 'aircraft') return obj.lat ?? 0;
+    return obj.lat;
   }, []);
 
   const getObjectLng = useCallback((d: object) => {
     const obj = d as CombinedObject;
-    return obj._type === 'aircraft' ? (obj.lon ?? 0) : obj.lon;
+    if (obj._type === 'aircraft') return obj.lon ?? 0;
+    if (obj._type === 'satellite') return obj.lng;
+    return obj.lon;
   }, []);
 
   const getObjectThree = useCallback((d: object) => {
     const obj = d as CombinedObject;
-    return obj._type === 'aircraft' ? makeAircraftMesh() : makeVesselMesh();
+    if (obj._type === 'aircraft') return makeAircraftMesh();
+    if (obj._type === 'satellite') return makeSatelliteMesh(obj.altKm);
+    return makeVesselMesh();
   }, []);
 
   const handleObjectClick = useCallback(
@@ -122,6 +142,10 @@ const GlobeView = memo(function GlobeView() {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { _type, ...data } = d;
         setSelectedObject({ type: 'aircraft', data: data as AircraftState });
+      } else if (d._type === 'satellite') {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { _type, ...data } = d;
+        setSelectedObject({ type: 'satellite', data: data as SatellitePosition });
       } else {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { _type, ...data } = d;
@@ -130,22 +154,6 @@ const GlobeView = memo(function GlobeView() {
     },
     [setSelectedObject, setAutoRotate]
   );
-
-  const handlePointClick = useCallback(
-    (point: object) => {
-      setAutoRotate(false);
-      setSelectedObject({ type: 'satellite', data: point as SatellitePosition });
-    },
-    [setSelectedObject, setAutoRotate]
-  );
-
-  const getSatColor = useCallback((d: object) => {
-    const sat = d as SatellitePosition;
-    // LEO <2000km cyan, MEO <35000km blue, GEO+ gold
-    if (sat.altKm < 2000) return COLORS.satellite;
-    if (sat.altKm < 35000) return '#818cf8'; // indigo
-    return '#fbbf24'; // amber/gold for GEO
-  }, []);
 
   return (
     <div ref={containerRef} style={{ width: '100vw', height: '100vh', background: '#000011' }}>
@@ -159,18 +167,6 @@ const GlobeView = memo(function GlobeView() {
         showAtmosphere={true}
         atmosphereColor="#3a7bd5"
         atmosphereAltitude={0.15}
-        // Satellite points layer
-        pointsData={visibleSatellites}
-        pointLat="lat"
-        pointLng="lng"
-        pointAltitude={(d: object) => altitudeScale((d as SatellitePosition).altKm)}
-        pointColor={getSatColor}
-        pointRadius={0.25}
-        pointResolution={4}
-        pointsMerge={true}
-        pointsTransitionDuration={0}
-        onPointClick={handlePointClick}
-        // Aircraft + vessel objects layer
         objectsData={combinedObjects}
         objectLat={getObjectLat}
         objectLng={getObjectLng}

@@ -20,6 +20,8 @@ export function useSatelliteWorker() {
       if (e.data.type === 'positions') {
         setSatellites(e.data.data);
         setLastUpdated('satellites', Date.now());
+      } else if (e.data.type === 'error') {
+        console.error('[satellite worker]', e.data.message);
       }
     };
 

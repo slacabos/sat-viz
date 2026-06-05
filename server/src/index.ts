@@ -6,6 +6,7 @@ import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
 import { aircraftRouter } from './routes/aircraft.js';
 import { vesselsRouter } from './routes/vessels.js';
+import { satellitesRouter } from './routes/satellites.js';
 
 config({ path: path.resolve(__dirname, '../../.env') });
 
@@ -20,6 +21,7 @@ app.use(express.json());
 
 app.use('/api/aircraft', aircraftRouter);
 app.use('/api/vessels', vesselsRouter);
+app.use('/api/satellites', satellitesRouter);
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 

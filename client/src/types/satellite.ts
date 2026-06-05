@@ -1,10 +1,7 @@
 export interface TLERecord {
-  OBJECT_NAME: string;
-  NORAD_CAT_ID: number;
-  INCLINATION: number;
-  MEAN_MOTION: number;
-  TLE_LINE1: string;
-  TLE_LINE2: string;
+  name: string;
+  line1: string;
+  line2: string;
 }
 
 export interface SatellitePosition {

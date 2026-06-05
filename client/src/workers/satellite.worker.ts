@@ -16,7 +16,7 @@ type OutMsg =
   | { type: 'status'; tleCount: number; fetchedAt: number }
   | { type: 'error'; message: string };
 
-const TLE_URL = 'https://celestrak.org/NORAD/elements/gp.php?GROUP=active&FORMAT=json';
+const TLE_URL = '/api/satellites';
 const PROPAGATE_INTERVAL_MS = 10_000;
 const TLE_REFRESH_INTERVAL_MS = 2 * 60 * 60 * 1000;
 
@@ -44,13 +44,13 @@ async function fetchTLEs() {
     records = data
       .map((r) => {
         try {
-          const satrec = twoline2satrec(r.TLE_LINE1, r.TLE_LINE2);
+          const satrec = twoline2satrec(r.line1, r.line2);
           if (satrec.error !== 0) return null;
           return {
             satrec,
-            name: r.OBJECT_NAME,
-            id: r.NORAD_CAT_ID,
-            inclination: r.INCLINATION,
+            name: r.name,
+            id: parseInt(r.line1.substring(2, 7).trim(), 10),
+            inclination: satrec.inclo * (180 / Math.PI),
           };
         } catch {
           return null;
