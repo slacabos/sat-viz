@@ -5,3 +5,4 @@ dist/
 
 .agents
 .codex
+server/.tle-cache.json
