@@ -1,6 +1,6 @@
 import GlobeView from './components/GlobeView';
 import { GlobeErrorBoundary } from './components/GlobeErrorBoundary';
-import { LayerControls } from './components/LayerControls';
+import { LayerControls, RotationControl } from './components/LayerControls';
 import { InfoPanel } from './components/InfoPanel';
 import { StatusBar } from './components/StatusBar';
 import { useSatelliteWorker } from './hooks/useSatelliteWorker';
@@ -18,6 +18,7 @@ export default function App() {
         <GlobeView />
       </GlobeErrorBoundary>
       <LayerControls />
+      <RotationControl />
       <InfoPanel />
       <StatusBar />
     </div>
