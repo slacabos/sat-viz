@@ -25,7 +25,7 @@ cd sat-viz
 npm install
 
 cp .env.example .env
-# Edit .env and set VITE_AISSTREAM_KEY
+# Edit .env and set AISSTREAM_KEY
 ```
 
 ## Run
@@ -40,7 +40,7 @@ Opens the frontend at **http://localhost:5173**. The Express proxy runs on **htt
 
 | Variable | Required | Description |
 |----------|----------|-------------|
-| `VITE_AISSTREAM_KEY` | Yes | AISStream API key for vessel tracking |
+| `AISSTREAM_KEY` | Yes | Server-only AISStream API key for vessel tracking |
 | `PORT` | No | Express server port (default: 3001) |
 | `CLIENT_ORIGIN` | No | CORS origin for the client (default: `http://localhost:5173`) |
 | `OPENSKY_CLIENT_ID` | No | OpenSky OAuth2 client ID — raises daily limit from 400 → 4000 credits |
@@ -58,7 +58,7 @@ OpenSky Network (no CORS)
         └─> client polls every 60s → store → Globe
 
 AISStream WebSocket
-  └─> direct browser connection — 2s batch flush
+  └─> Express SSE relay (/api/vessels/stream) — server keeps API key private
         └─> store → Globe
 ```
 
