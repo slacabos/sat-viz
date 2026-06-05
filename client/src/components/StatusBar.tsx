@@ -8,13 +8,11 @@ function fmt(ts: number | null): string {
 }
 
 export function StatusBar() {
-  const { satellites, aircraft, vessels, lastUpdated, wsStatus } = useAppStore((s) => ({
-    satellites: s.satellites,
-    aircraft: s.aircraft,
-    vessels: s.vessels,
-    lastUpdated: s.lastUpdated,
-    wsStatus: s.wsStatus,
-  }));
+  const satellites = useAppStore((s) => s.satellites);
+  const aircraft = useAppStore((s) => s.aircraft);
+  const vessels = useAppStore((s) => s.vessels);
+  const lastUpdated = useAppStore((s) => s.lastUpdated);
+  const wsStatus = useAppStore((s) => s.wsStatus);
 
   const wsColor =
     wsStatus === 'connected' ? '#10b981' : wsStatus === 'connecting' ? '#f59e0b' : '#ef4444';

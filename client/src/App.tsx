@@ -1,4 +1,5 @@
 import GlobeView from './components/GlobeView';
+import { GlobeErrorBoundary } from './components/GlobeErrorBoundary';
 import { LayerControls } from './components/LayerControls';
 import { InfoPanel } from './components/InfoPanel';
 import { StatusBar } from './components/StatusBar';
@@ -13,7 +14,9 @@ export default function App() {
 
   return (
     <div style={{ width: '100vw', height: '100vh', background: '#000011', overflow: 'hidden' }}>
-      <GlobeView />
+      <GlobeErrorBoundary>
+        <GlobeView />
+      </GlobeErrorBoundary>
       <LayerControls />
       <InfoPanel />
       <StatusBar />
