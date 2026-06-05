@@ -43,8 +43,8 @@ Opens the frontend at **http://localhost:5173**. The Express proxy runs on **htt
 | `VITE_AISSTREAM_KEY` | Yes | AISStream API key for vessel tracking |
 | `PORT` | No | Express server port (default: 3001) |
 | `CLIENT_ORIGIN` | No | CORS origin for the client (default: `http://localhost:5173`) |
-| `OPENSKY_USER` | No | OpenSky username — raises daily limit from 400 → 4000 credits |
-| `OPENSKY_PASS` | No | OpenSky password |
+| `OPENSKY_CLIENT_ID` | No | OpenSky OAuth2 client ID — raises daily limit from 400 → 4000 credits |
+| `OPENSKY_CLIENT_SECRET` | No | OpenSky OAuth2 client secret |
 
 ## Architecture
 

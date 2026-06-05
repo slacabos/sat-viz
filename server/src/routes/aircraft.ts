@@ -21,7 +21,41 @@ interface Cache {
   timestamp: number;
 }
 
-const cache = new Map<string, Cache>();
+const TOKEN_URL =
+  'https://auth.opensky-network.org/auth/realms/opensky-network/protocol/openid-connect/token';
+
+let tokenCache: { token: string; expiresAt: number } | null = null;
+
+async function getToken(): Promise<string | null> {
+  const clientId = process.env.OPENSKY_CLIENT_ID;
+  const clientSecret = process.env.OPENSKY_CLIENT_SECRET;
+  if (!clientId || !clientSecret) return null;
+
+  if (tokenCache && tokenCache.expiresAt > Date.now() + 60_000) {
+    return tokenCache.token;
+  }
+
+  const body = new URLSearchParams({
+    grant_type: 'client_credentials',
+    client_id: clientId,
+    client_secret: clientSecret,
+  });
+
+  const resp = await fetch(TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: body.toString(),
+    signal: AbortSignal.timeout(10_000),
+  });
+
+  if (!resp.ok) throw new Error(`Token fetch failed: ${resp.status}`);
+
+  const data = (await resp.json()) as { access_token: string; expires_in: number };
+  tokenCache = { token: data.access_token, expiresAt: Date.now() + data.expires_in * 1000 };
+  return tokenCache.token;
+}
+
+const dataCache = new Map<string, Cache>();
 const CACHE_TTL_MS = 12_000;
 const BOUNDS_KEYS = ['lamin', 'lamax', 'lomin', 'lomax'] as const;
 
@@ -41,6 +75,14 @@ function mapState(s: unknown[]): AircraftState {
   };
 }
 
+async function fetchUpstream(params: URLSearchParams, token: string | null) {
+  const url = `https://opensky-network.org/api/states/all${params.size ? '?' + params : ''}`;
+  return fetch(url, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    signal: AbortSignal.timeout(10_000),
+  });
+}
+
 aircraftRouter.get('/', async (req: Request, res: Response) => {
   const now = Date.now();
 
@@ -50,8 +92,9 @@ aircraftRouter.get('/', async (req: Request, res: Response) => {
   if (lamax) params.set('lamax', String(lamax));
   if (lomin) params.set('lomin', String(lomin));
   if (lomax) params.set('lomax', String(lomax));
-  const cacheKey = BOUNDS_KEYS.map((key) => `${key}=${params.get(key) ?? ''}`).join('&');
-  const cached = cache.get(cacheKey);
+
+  const cacheKey = BOUNDS_KEYS.map((k) => `${k}=${params.get(k) ?? ''}`).join('&');
+  const cached = dataCache.get(cacheKey);
 
   if (cached && now - cached.timestamp < CACHE_TTL_MS) {
     res.setHeader('X-Cached', 'true');
@@ -59,17 +102,16 @@ aircraftRouter.get('/', async (req: Request, res: Response) => {
     return;
   }
 
-  const user = process.env.OPENSKY_USER;
-  const pass = process.env.OPENSKY_PASS;
-  const auth = user && pass ? `Basic ${Buffer.from(`${user}:${pass}`).toString('base64')}` : undefined;
-
-  const url = `https://opensky-network.org/api/states/all${params.size ? '?' + params : ''}`;
-
   try {
-    const upstream = await fetch(url, {
-      headers: auth ? { Authorization: auth } : {},
-      signal: AbortSignal.timeout(10_000),
-    });
+    let token = await getToken();
+    let upstream = await fetchUpstream(params, token);
+
+    // On 401, clear token cache and retry once with a fresh token
+    if (upstream.status === 401) {
+      tokenCache = null;
+      token = await getToken();
+      upstream = await fetchUpstream(params, token);
+    }
 
     if (!upstream.ok) {
       if (cached) {
@@ -81,12 +123,14 @@ aircraftRouter.get('/', async (req: Request, res: Response) => {
       return;
     }
 
-    const body = await upstream.json() as { time: number; states: unknown[][] | null };
-    const states = (body.states ?? []).filter((s) => s[5] != null && s[6] != null).map(mapState);
+    const body = (await upstream.json()) as { time: number; states: unknown[][] | null };
+    const states = (body.states ?? [])
+      .filter((s) => s[5] != null && s[6] != null)
+      .map(mapState);
 
-    cache.set(cacheKey, { data: states, timestamp: now });
+    dataCache.set(cacheKey, { data: states, timestamp: now });
     res.json({ time: body.time, states });
-  } catch (err) {
+  } catch {
     if (cached) {
       res.setHeader('X-Cached', 'true');
       res.json({ time: Math.floor(cached.timestamp / 1000), states: cached.data });
