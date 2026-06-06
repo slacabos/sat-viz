@@ -5,9 +5,11 @@ import * as THREE from 'three';
 import { useAppStore } from '../store/useAppStore';
 import { classifyOrbit, satPos3, SAT_REL_ALT } from '../lib/altitudeScale';
 import { COLORS } from '../lib/colorConfig';
+import { recordPerf, timePerf } from '../lib/perf';
 import type { SatellitePosition } from '../types/satellite';
 
 const MAX_SATS = 12000;
+const CULL_THROTTLE_MS = 100;
 // Cull satellites whose normalized direction has a dot product below this threshold
 // with the camera direction. -0.1 preserves near-horizon satellites to avoid pop-in.
 const CULL_THRESHOLD = -0.1;
@@ -86,6 +88,10 @@ export function useSatelliteInstances(
     meshesRef.current = [meshLEO, meshMEO, meshGEO];
 
     const camera = globeRef.current.camera();
+    const scratchCameraLocal = new THREE.Vector3();
+    let satellitesVisible = true;
+    let lastCullAt = 0;
+    let pendingCullTimer: ReturnType<typeof setTimeout> | null = null;
     // OrbitControls extends EventDispatcher; cast to access addEventListener
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const controls = globeRef.current.controls() as any as THREE.EventDispatcher<
@@ -98,49 +104,99 @@ export function useSatelliteInstances(
     // Filters the global satellite buffer to only the camera-facing hemisphere,
     // copies their pre-computed matrices into the InstancedMesh buffers, and
     // rebuilds the per-class data arrays used for click resolution.
-    function reCull() {
-      const [mLEO, mMEO, mGEO] = meshesRef.current!;
-      const meshArr = [mLEO, mMEO, mGEO];
+    function runReCull() {
+      if (!satellitesVisible) return;
 
-      // Camera position in globe-local space (world → local strips globe rotation)
-      const camLocal = group.worldToLocal(camera.position.clone()).normalize();
-      const cx = camLocal.x,
-        cy = camLocal.y,
-        cz = camLocal.z;
+      timePerf('satellites.reCull.ms', () => {
+        const [mLEO, mMEO, mGEO] = meshesRef.current!;
+        const meshArr = [mLEO, mMEO, mGEO];
 
-      const dirs = satDirs.current;
-      const mats = preMatrices.current;
-      const classes = satClass.current;
-      const n = totalCount.current;
+        // Camera position in globe-local space (world → local strips globe rotation)
+        scratchCameraLocal.copy(camera.position);
+        group.worldToLocal(scratchCameraLocal).normalize();
+        const cx = scratchCameraLocal.x,
+          cy = scratchCameraLocal.y,
+          cz = scratchCameraLocal.z;
 
-      const counts = [0, 0, 0];
-      const culled = [leoData.current, meoData.current, geoData.current];
-      // Reset culled arrays without reallocating
-      culled[0].length = 0;
-      culled[1].length = 0;
-      culled[2].length = 0;
+        const dirs = satDirs.current;
+        const mats = preMatrices.current;
+        const classes = satClass.current;
+        const n = totalCount.current;
 
-      const flatData = satDataFlat.current;
+        const counts = [0, 0, 0];
+        const culled = [leoData.current, meoData.current, geoData.current];
+        // Reset culled arrays without reallocating
+        culled[0].length = 0;
+        culled[1].length = 0;
+        culled[2].length = 0;
 
-      for (let i = 0; i < n; i++) {
-        const di = i * 3;
-        const dot = dirs[di] * cx + dirs[di + 1] * cy + dirs[di + 2] * cz;
-        if (dot < CULL_THRESHOLD) continue;
+        const flatData = satDataFlat.current;
 
-        const cls = classes[i];
-        const dst = counts[cls]++;
-        // Direct typed-array copy: 16 floats from global preMatrices → mesh instanceMatrix
-        meshArr[cls].instanceMatrix.array.set(mats.subarray(i * 16, i * 16 + 16), dst * 16);
-        culled[cls].push(flatData[i]);
-      }
+        for (let i = 0; i < n; i++) {
+          const di = i * 3;
+          const dot = dirs[di] * cx + dirs[di + 1] * cy + dirs[di + 2] * cz;
+          if (dot < CULL_THRESHOLD) continue;
 
-      for (let m = 0; m < 3; m++) {
-        meshArr[m].count = counts[m];
-        meshArr[m].instanceMatrix.needsUpdate = true;
-      }
+          const cls = classes[i];
+          const dst = counts[cls]++;
+          // Direct typed-array copy: 16 floats from global preMatrices → mesh instanceMatrix
+          const src = i * 16;
+          const dest = dst * 16;
+          const instanceMatrix = meshArr[cls].instanceMatrix.array;
+          instanceMatrix[dest] = mats[src];
+          instanceMatrix[dest + 1] = mats[src + 1];
+          instanceMatrix[dest + 2] = mats[src + 2];
+          instanceMatrix[dest + 3] = mats[src + 3];
+          instanceMatrix[dest + 4] = mats[src + 4];
+          instanceMatrix[dest + 5] = mats[src + 5];
+          instanceMatrix[dest + 6] = mats[src + 6];
+          instanceMatrix[dest + 7] = mats[src + 7];
+          instanceMatrix[dest + 8] = mats[src + 8];
+          instanceMatrix[dest + 9] = mats[src + 9];
+          instanceMatrix[dest + 10] = mats[src + 10];
+          instanceMatrix[dest + 11] = mats[src + 11];
+          instanceMatrix[dest + 12] = mats[src + 12];
+          instanceMatrix[dest + 13] = mats[src + 13];
+          instanceMatrix[dest + 14] = mats[src + 14];
+          instanceMatrix[dest + 15] = mats[src + 15];
+          culled[cls].push(flatData[i]);
+        }
+
+        for (let m = 0; m < 3; m++) {
+          meshArr[m].count = counts[m];
+          meshArr[m].instanceMatrix.needsUpdate = true;
+        }
+        recordPerf('satellites.rendered.count', counts[0] + counts[1] + counts[2]);
+      });
     }
 
-    controls.addEventListener('change', reCull);
+    function reCullNow() {
+      if (pendingCullTimer) {
+        clearTimeout(pendingCullTimer);
+        pendingCullTimer = null;
+      }
+      lastCullAt = performance.now();
+      runReCull();
+    }
+
+    function scheduleReCull() {
+      if (!satellitesVisible) return;
+
+      const now = performance.now();
+      const elapsed = now - lastCullAt;
+      if (elapsed >= CULL_THROTTLE_MS) {
+        reCullNow();
+        return;
+      }
+
+      if (pendingCullTimer) return;
+      pendingCullTimer = setTimeout(() => {
+        pendingCullTimer = null;
+        reCullNow();
+      }, CULL_THROTTLE_MS - elapsed);
+    }
+
+    controls.addEventListener('change', scheduleReCull);
 
     // ── updateMatrices ──────────────────────────────────────────────────────
     // Called every 10 seconds when the worker delivers new satellite positions.
@@ -190,12 +246,14 @@ export function useSatelliteInstances(
         mats[mi + 15] = 1;
       }
 
-      reCull();
+      reCullNow();
     }
 
     // ── Layer visibility ─────────────────────────────────────────────────────
     function setVisible(v: boolean) {
+      satellitesVisible = v;
       for (const m of meshesRef.current!) m.visible = v;
+      if (v) reCullNow();
     }
 
     // Imperative Zustand subscriptions — no React re-renders triggered
@@ -211,7 +269,8 @@ export function useSatelliteInstances(
 
     return () => {
       unsub();
-      controls.removeEventListener('change', reCull);
+      controls.removeEventListener('change', scheduleReCull);
+      if (pendingCullTimer) clearTimeout(pendingCullTimer);
       for (const m of meshesRef.current!) {
         group.remove(m);
         const mat = m.material;

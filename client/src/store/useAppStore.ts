@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { SatellitePosition } from '../types/satellite';
 import type { AircraftState } from '../types/aircraft';
 import type { VesselPosition } from '../types/vessel';
+import { recordPerf, timePerf } from '../lib/perf';
 
 export type SelectedObject =
   | { type: 'satellite'; data: SatellitePosition }
@@ -52,17 +53,26 @@ export const useAppStore = create<AppState>((set) => {
     aircraft: [],
     vessels: [],
 
-    setSatellites: (data) => set({ satellites: data }),
-    setAircraft: (data) => set({ aircraft: data }),
+    setSatellites: (data) => {
+      recordPerf('satellites.store.count', data.length);
+      set({ satellites: data });
+    },
+    setAircraft: (data) => {
+      recordPerf('aircraft.store.count', data.length);
+      set({ aircraft: data });
+    },
     bulkUpsertVessels: (data) => {
-      const now = Date.now();
-      const tenMinAgo = now - 10 * 60 * 1000;
-      data.forEach((v) => vesselMap.set(v.mmsi, v));
-      // age out stale vessels
-      for (const [mmsi, v] of vesselMap) {
-        if (v.lastUpdate < tenMinAgo) vesselMap.delete(mmsi);
-      }
-      set({ vessels: Array.from(vesselMap.values()) });
+      timePerf('vessels.store.upsertMs', () => {
+        const now = Date.now();
+        const tenMinAgo = now - 10 * 60 * 1000;
+        data.forEach((v) => vesselMap.set(v.mmsi, v));
+        // age out stale vessels
+        for (const [mmsi, v] of vesselMap) {
+          if (v.lastUpdate < tenMinAgo) vesselMap.delete(mmsi);
+        }
+        recordPerf('vessels.store.count', vesselMap.size);
+        set({ vessels: Array.from(vesselMap.values()) });
+      });
     },
     clearVessels: () => {
       vesselMap = new Map();

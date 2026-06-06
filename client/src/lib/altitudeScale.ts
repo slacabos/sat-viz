@@ -27,8 +27,8 @@ export const GLOBE_RADIUS = 100; // three-globe default
 // what react-globe.gl positions for other layers.
 export function satPos3(lat: number, lng: number, relAlt: number): [number, number, number] {
   const phi = (90 - lat) * DEG2RAD;
-  const theta = (lng - 180) * DEG2RAD;
+  const theta = (90 - lng) * DEG2RAD;
   const r = GLOBE_RADIUS * (1 + relAlt);
   const sinPhi = Math.sin(phi);
-  return [-r * sinPhi * Math.cos(theta), r * Math.cos(phi), r * sinPhi * Math.sin(theta)];
+  return [r * sinPhi * Math.cos(theta), r * Math.cos(phi), r * sinPhi * Math.sin(theta)];
 }

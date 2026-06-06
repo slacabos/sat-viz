@@ -3,28 +3,28 @@ import { useAppStore } from '../store/useAppStore';
 export function LayerControls() {
   const layers = useAppStore((s) => s.layers);
   const toggleLayer = useAppStore((s) => s.toggleLayer);
-  const satellites = useAppStore((s) => s.satellites);
-  const aircraft = useAppStore((s) => s.aircraft);
-  const vessels = useAppStore((s) => s.vessels);
+  const satelliteCount = useAppStore((s) => s.satellites.length);
+  const airborneCount = useAppStore((s) => s.aircraft.filter((a) => !a.onGround).length);
+  const vesselCount = useAppStore((s) => s.vessels.length);
   const buttons = [
     {
       key: 'satellites' as const,
       label: 'Satellites',
-      count: satellites.length,
+      count: satelliteCount,
       color: '#22d3ee',
       icon: '🛰',
     },
     {
       key: 'aircraft' as const,
       label: 'Aircraft',
-      count: aircraft.filter((a) => !a.onGround).length,
+      count: airborneCount,
       color: '#f59e0b',
       icon: '✈',
     },
     {
       key: 'vessels' as const,
       label: 'Vessels',
-      count: vessels.length,
+      count: vesselCount,
       color: '#10b981',
       icon: '🚢',
     },

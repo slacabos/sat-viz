@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { altitudeScale } from '../lib/altitudeScale';
+import { altitudeScale, satPos3 } from '../lib/altitudeScale';
 
 describe('altitudeScale', () => {
   it('returns 0 for surface level', () => {
@@ -22,5 +22,23 @@ describe('altitudeScale', () => {
     const alt = altitudeScale(10);
     expect(alt).toBeGreaterThan(0);
     expect(alt).toBeLessThan(0.005);
+  });
+
+  it('matches three-globe cartesian orientation for lat/lng positions', () => {
+    expect(satPos3(0, 0, 0)).toEqual([
+      expect.closeTo(0, 6),
+      expect.closeTo(0, 6),
+      expect.closeTo(100, 6),
+    ]);
+    expect(satPos3(0, 90, 0)).toEqual([
+      expect.closeTo(100, 6),
+      expect.closeTo(0, 6),
+      expect.closeTo(0, 6),
+    ]);
+    expect(satPos3(90, 0, 0)).toEqual([
+      expect.closeTo(0, 6),
+      expect.closeTo(100, 6),
+      expect.closeTo(0, 6),
+    ]);
   });
 });

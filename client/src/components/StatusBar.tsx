@@ -8,9 +8,9 @@ function fmt(ts: number | null): string {
 }
 
 export function StatusBar() {
-  const satellites = useAppStore((s) => s.satellites);
-  const aircraft = useAppStore((s) => s.aircraft);
-  const vessels = useAppStore((s) => s.vessels);
+  const satelliteCount = useAppStore((s) => s.satellites.length);
+  const airborneCount = useAppStore((s) => s.aircraft.filter((a) => !a.onGround).length);
+  const vesselCount = useAppStore((s) => s.vessels.length);
   const lastUpdated = useAppStore((s) => s.lastUpdated);
   const wsStatus = useAppStore((s) => s.wsStatus);
 
@@ -36,15 +36,13 @@ export function StatusBar() {
         color: 'rgba(255,255,255,0.5)',
       }}
     >
-      <span style={{ color: '#22d3ee' }}>🛰 {satellites.length.toLocaleString()}</span>
+      <span style={{ color: '#22d3ee' }}>🛰 {satelliteCount.toLocaleString()}</span>
       <span style={{ opacity: 0.4 }}>updated {fmt(lastUpdated.satellites)}</span>
 
-      <span style={{ color: '#f59e0b', marginLeft: 12 }}>
-        ✈ {aircraft.filter((a) => !a.onGround).length.toLocaleString()}
-      </span>
+      <span style={{ color: '#f59e0b', marginLeft: 12 }}>✈ {airborneCount.toLocaleString()}</span>
       <span style={{ opacity: 0.4 }}>updated {fmt(lastUpdated.aircraft)}</span>
 
-      <span style={{ color: '#10b981', marginLeft: 12 }}>🚢 {vessels.length.toLocaleString()}</span>
+      <span style={{ color: '#10b981', marginLeft: 12 }}>🚢 {vesselCount.toLocaleString()}</span>
       <span style={{ color: wsColor, fontSize: 10 }}>● {wsStatus}</span>
 
       <span style={{ marginLeft: 'auto', opacity: 0.3 }}>sat-viz</span>

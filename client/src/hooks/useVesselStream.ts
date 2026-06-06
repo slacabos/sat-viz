@@ -1,8 +1,9 @@
 import { useEffect, useRef } from 'react';
 import { useAppStore } from '../store/useAppStore';
+import { recordPerf, timePerf } from '../lib/perf';
 import type { VesselPosition } from '../types/vessel';
 
-const BATCH_FLUSH_MS = 2_000;
+const BATCH_FLUSH_MS = 5_000;
 const STREAM_URL = '/api/vessels/stream';
 
 type VesselStatusEvent = {
@@ -20,10 +21,12 @@ export function useVesselStream() {
   useEffect(() => {
     let disposed = false;
 
-    // Flush buffer to store every 2s
+    // Flush buffer to store every 5s
     const flushTimer = setInterval(() => {
       if (buffer.current.size > 0) {
-        bulkUpsertVessels(Array.from(buffer.current.values()));
+        const vessels = Array.from(buffer.current.values());
+        recordPerf('vessels.flush.batchSize', vessels.length);
+        timePerf('vessels.flush.storeMs', () => bulkUpsertVessels(vessels));
         setLastUpdated('vessels', Date.now());
         buffer.current.clear();
       }
