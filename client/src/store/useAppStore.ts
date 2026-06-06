@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { SatellitePosition } from '../types/satellite';
+import type { SatellitePosition, SatelliteTleIndex } from '../types/satellite';
 import type { AircraftState } from '../types/aircraft';
 import type { VesselPosition } from '../types/vessel';
 import { recordPerf, timePerf } from '../lib/perf';
@@ -24,12 +24,16 @@ interface AppState {
   toggleLayer: (layer: keyof LayerVisibility) => void;
   satelliteOrbits: OrbitVisibility;
   toggleSatelliteOrbit: (orbit: OrbitClass) => void;
+  showSelectedOrbit: boolean;
+  toggleSelectedOrbit: () => void;
 
   satellites: SatellitePosition[];
+  satelliteTlesById: SatelliteTleIndex;
   aircraft: AircraftState[];
   vessels: VesselPosition[];
 
   setSatellites: (data: SatellitePosition[]) => void;
+  setSatelliteTles: (data: SatelliteTleIndex) => void;
   setAircraft: (data: AircraftState[]) => void;
   bulkUpsertVessels: (data: VesselPosition[]) => void;
   clearVessels: () => void;
@@ -66,8 +70,11 @@ export const useAppStore = create<AppState>((set) => {
       set((s) => ({
         satelliteOrbits: { ...s.satelliteOrbits, [orbit]: !s.satelliteOrbits[orbit] },
       })),
+    showSelectedOrbit: true,
+    toggleSelectedOrbit: () => set((s) => ({ showSelectedOrbit: !s.showSelectedOrbit })),
 
     satellites: [],
+    satelliteTlesById: {},
     aircraft: [],
     vessels: [],
 
@@ -93,6 +100,7 @@ export const useAppStore = create<AppState>((set) => {
         return { satellites: data, selectedObject, hoveredObject };
       });
     },
+    setSatelliteTles: (data) => set({ satelliteTlesById: data }),
     setAircraft: (data) => {
       recordPerf('aircraft.store.count', data.length);
       set({ aircraft: data });

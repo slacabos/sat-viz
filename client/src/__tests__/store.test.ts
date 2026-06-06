@@ -40,6 +40,34 @@ describe('useAppStore — layer toggles', () => {
   });
 });
 
+describe('useAppStore — selected orbit', () => {
+  beforeEach(() => {
+    useAppStore.setState({
+      showSelectedOrbit: true,
+      satelliteTlesById: {},
+    });
+  });
+
+  it('toggles selected orbit visibility', () => {
+    useAppStore.getState().toggleSelectedOrbit();
+    expect(useAppStore.getState().showSelectedOrbit).toBe(false);
+    useAppStore.getState().toggleSelectedOrbit();
+    expect(useAppStore.getState().showSelectedOrbit).toBe(true);
+  });
+
+  it('stores satellite TLEs by NORAD id', () => {
+    useAppStore.getState().setSatelliteTles({
+      25544: {
+        name: 'ISS',
+        line1: '1 25544U 98067A   24156.52996528  .00018401  00000+0  33219-3 0  9993',
+        line2: '2 25544  51.6401 215.0481 0004986 310.8137 197.0690 15.49813782456123',
+      },
+    });
+
+    expect(useAppStore.getState().satelliteTlesById[25544]?.name).toBe('ISS');
+  });
+});
+
 describe('useAppStore — bulkUpsertVessels', () => {
   beforeEach(() => {
     useAppStore.getState().clearVessels();

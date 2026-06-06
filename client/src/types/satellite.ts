@@ -4,6 +4,8 @@ export interface TLERecord {
   line2: string;
 }
 
+export type SatelliteTleIndex = Record<number, TLERecord>;
+
 export interface SatellitePosition {
   id: number;
   name: string;

@@ -217,6 +217,8 @@ export function GlobeControls() {
   const toggleMapStyle = useAppStore((s) => s.toggleMapStyle);
   const showBorders = useAppStore((s) => s.showBorders);
   const toggleBorders = useAppStore((s) => s.toggleBorders);
+  const showSelectedOrbit = useAppStore((s) => s.showSelectedOrbit);
+  const toggleSelectedOrbit = useAppStore((s) => s.toggleSelectedOrbit);
 
   return (
     <div
@@ -250,6 +252,13 @@ export function GlobeControls() {
         active={showBorders}
         color="#6ee7b7"
         onClick={toggleBorders}
+      />
+      <IconBtn
+        icon="⎌"
+        label={showSelectedOrbit ? 'Hide selected orbit' : 'Show selected orbit'}
+        active={showSelectedOrbit}
+        color="#22d3ee"
+        onClick={toggleSelectedOrbit}
       />
     </div>
   );

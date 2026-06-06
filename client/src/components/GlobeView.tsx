@@ -7,6 +7,8 @@ import { useSatelliteInstances } from '../hooks/useSatelliteInstances';
 import { useVesselInstances } from '../hooks/useVesselInstances';
 import { useAircraftInstances } from '../hooks/useAircraftInstances';
 import { useObjectHighlights } from '../hooks/useObjectHighlights';
+import { classifyOrbit } from '../lib/altitudeScale';
+import { buildSatelliteOrbitPath } from '../lib/satelliteOrbitPath';
 
 function addPickTarget(targets: THREE.Object3D[], mesh: THREE.InstancedMesh | null) {
   if (mesh && mesh.visible && mesh.count > 0) targets.push(mesh);
@@ -31,14 +33,19 @@ const GlobeView = memo(function GlobeView() {
   const setAutoRotate = useAppStore((s) => s.setAutoRotate);
   const mapStyle = useAppStore((s) => s.mapStyle);
   const showBorders = useAppStore((s) => s.showBorders);
+  const selectedObject = useAppStore((s) => s.selectedObject);
+  const showSelectedOrbit = useAppStore((s) => s.showSelectedOrbit);
+  const satelliteTlesById = useAppStore((s) => s.satelliteTlesById);
+  const layers = useAppStore((s) => s.layers);
+  const satelliteOrbits = useAppStore((s) => s.satelliteOrbits);
 
   const [countries, setCountries] = useState<object[]>([]);
   useEffect(() => {
-    if (!showBorders || countries.length > 0) return;
+    if (countries.length > 0) return;
     fetch('/geo/countries.geojson')
       .then((r) => r.json())
       .then((data: { features?: object[] }) => setCountries(data.features ?? []));
-  }, [showBorders, countries.length]);
+  }, [countries.length]);
 
   const darkMaterial = useMemo(() => new THREE.MeshPhongMaterial({ color: '#050a14' }), []);
 
@@ -49,6 +56,22 @@ const GlobeView = memo(function GlobeView() {
     globeReady
   );
   useObjectHighlights(globeRef, globeReady);
+
+  const selectedOrbitPath = useMemo(() => {
+    if (!showSelectedOrbit || !layers.satellites || selectedObject?.type !== 'satellite') {
+      return [];
+    }
+
+    const orbitClass = classifyOrbit(selectedObject.data.altKm);
+    if (!satelliteOrbits[orbitClass]) return [];
+
+    const path = buildSatelliteOrbitPath(
+      selectedObject.data,
+      satelliteTlesById[selectedObject.data.id],
+      Date.now()
+    );
+    return path ? [path] : [];
+  }, [layers.satellites, satelliteOrbits, satelliteTlesById, selectedObject, showSelectedOrbit]);
 
   // Resize observer
   useEffect(() => {
@@ -204,11 +227,22 @@ const GlobeView = memo(function GlobeView() {
         showAtmosphere={true}
         atmosphereColor={mapStyle === 'dark' ? '#1a3a6b' : '#3a7bd5'}
         atmosphereAltitude={0.15}
-        polygonsData={showBorders ? countries : []}
+        polygonsData={mapStyle === 'dark' || showBorders ? countries : []}
         polygonCapColor={() => (mapStyle === 'dark' ? '#0d1b2e' : 'rgba(0,0,0,0)')}
         polygonSideColor={() => 'transparent'}
-        polygonStrokeColor={() => '#2a4a6b'}
+        polygonStrokeColor={() =>
+          showBorders ? '#2a4a6b' : mapStyle === 'dark' ? '#0d1b2e' : 'transparent'
+        }
         polygonAltitude={0.002}
+        pathsData={selectedOrbitPath}
+        pathPoints="points"
+        pathPointLat="lat"
+        pathPointLng="lng"
+        pathPointAlt="alt"
+        pathColor={() => '#67e8f9'}
+        pathStroke={0.38}
+        pathResolution={1}
+        pathTransitionDuration={0}
         onGlobeReady={() => setGlobeReady(true)}
       />
     </div>

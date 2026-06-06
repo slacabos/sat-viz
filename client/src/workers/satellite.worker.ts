@@ -8,11 +8,12 @@ import {
   type EciVec3,
   type SatRec,
 } from '../lib/satellite';
-import type { TLERecord, SatellitePosition } from '../types/satellite';
+import type { TLERecord, SatellitePosition, SatelliteTleIndex } from '../types/satellite';
 
 type InMsg = { type: 'start' } | { type: 'stop' };
 type OutMsg =
   | { type: 'positions'; data: SatellitePosition[] }
+  | { type: 'tleIndex'; data: SatelliteTleIndex }
   | { type: 'status'; tleCount: number; fetchedAt: number }
   | { type: 'error'; message: string };
 
@@ -75,6 +76,13 @@ async function fetchTLEs() {
       })
       .filter((r): r is SatRecord => r !== null);
 
+    const tleIndex = data.reduce<SatelliteTleIndex>((acc, tle) => {
+      const id = parseInt(tle.line1.substring(2, 7).trim(), 10);
+      if (!Number.isNaN(id)) acc[id] = tle;
+      return acc;
+    }, {});
+
+    post({ type: 'tleIndex', data: tleIndex });
     post({ type: 'status', tleCount: records.length, fetchedAt: Date.now() });
   } catch (err) {
     post({ type: 'error', message: String(err) });
