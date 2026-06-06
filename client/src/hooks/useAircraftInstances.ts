@@ -11,7 +11,7 @@ import type { AircraftState } from '../types/aircraft';
 const MAX_AIRCRAFT = 20_000;
 const PICK_BOUND_RADIUS = 102;
 const DEG2RAD = Math.PI / 180;
-const MIN_AIRCRAFT_REL_ALT = 0.006;
+const MIN_AIRCRAFT_REL_ALT = 0.008;
 
 export interface AircraftInstances {
   meshRef: RefObject<THREE.InstancedMesh | null>;
