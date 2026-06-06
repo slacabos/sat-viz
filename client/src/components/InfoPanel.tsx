@@ -48,16 +48,38 @@ function Row({ label, value }: { label: string; value: string | number | null | 
   );
 }
 
+function getConstellation(name: string): string {
+  const n = name.toUpperCase();
+  if (n.startsWith('STARLINK')) return 'Starlink';
+  if (n.startsWith('ONEWEB')) return 'OneWeb';
+  if (n.startsWith('IRIDIUM')) return 'Iridium';
+  if (n.startsWith('GPS')) return 'GPS';
+  if (n.startsWith('GLONASS')) return 'GLONASS';
+  if (n.startsWith('BEIDOU') || n.startsWith('BDS')) return 'BeiDou';
+  if (n.startsWith('GALILEO')) return 'Galileo';
+  if (n.includes('ISS') || n.includes('ZARYA') || n.includes('ZVEZDA')) return 'ISS';
+  if (n.startsWith('NOAA')) return 'NOAA';
+  if (n.startsWith('GOES')) return 'GOES';
+  if (n.startsWith('METEOSAT')) return 'Meteosat';
+  if (n.startsWith('LANDSAT')) return 'Landsat';
+  if (n.startsWith('SENTINEL')) return 'Sentinel';
+  if (n.startsWith('TERRA') || n.startsWith('AQUA')) return 'NASA EOS';
+  if (n.startsWith('HUBBLE') || n.includes('HST')) return 'Hubble';
+  return 'Other';
+}
+
 function SatPanel({ data }: { data: SatellitePosition }) {
+  const orbitClass = data.altKm < 2000 ? 'LEO' : data.altKm < 35000 ? 'MEO' : 'GEO';
   return (
     <>
       <Row label="NORAD ID" value={data.id} />
+      <Row label="Constellation" value={getConstellation(data.name)} />
+      <Row label="Orbit" value={orbitClass} />
       <Row label="Altitude" value={`${Math.round(data.altKm).toLocaleString()} km`} />
-      <Row
-        label="Inclination"
-        value={data.inclination != null ? `${data.inclination.toFixed(1)}°` : null}
-      />
-      <Row label="Orbit" value={data.altKm < 2000 ? 'LEO' : data.altKm < 35000 ? 'MEO' : 'GEO'} />
+      <Row label="Apogee" value={`${Math.round(data.apogeeKm).toLocaleString()} km`} />
+      <Row label="Perigee" value={`${Math.round(data.perigeeKm).toLocaleString()} km`} />
+      <Row label="Inclination" value={`${data.inclination.toFixed(1)}°`} />
+      <Row label="Period" value={`${data.periodMin.toFixed(1)} min`} />
     </>
   );
 }

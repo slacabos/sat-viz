@@ -15,6 +15,9 @@ function makeSatellite(overrides: Partial<SatellitePosition> = {}): SatellitePos
     lng: 0,
     altKm: 400,
     inclination: 51.6,
+    periodMin: 92.5,
+    apogeeKm: 420,
+    perigeeKm: 380,
     ...overrides,
   };
 }

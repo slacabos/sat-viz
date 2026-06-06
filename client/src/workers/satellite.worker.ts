@@ -20,11 +20,27 @@ const TLE_URL = '/api/satellites';
 const PROPAGATE_INTERVAL_MS = 10_000;
 const TLE_REFRESH_INTERVAL_MS = 2 * 60 * 60 * 1000;
 
+const EARTH_RADIUS_KM = 6371.0;
+const GM_KM3_S2 = 398600.4418;
+
+function orbitParams(satrec: SatRec): { periodMin: number; apogeeKm: number; perigeeKm: number } {
+  const noRadPerS = satrec.no / 60;
+  const semiMajorKm = Math.cbrt(GM_KM3_S2 / (noRadPerS * noRadPerS));
+  return {
+    periodMin: (2 * Math.PI) / satrec.no,
+    apogeeKm: semiMajorKm * (1 + satrec.ecco) - EARTH_RADIUS_KM,
+    perigeeKm: semiMajorKm * (1 - satrec.ecco) - EARTH_RADIUS_KM,
+  };
+}
+
 interface SatRecord {
   satrec: SatRec;
   name: string;
   id: number;
   inclination: number;
+  periodMin: number;
+  apogeeKm: number;
+  perigeeKm: number;
 }
 
 let records: SatRecord[] = [];
@@ -42,7 +58,7 @@ async function fetchTLEs() {
     const data: TLERecord[] = await resp.json();
 
     records = data
-      .map((r) => {
+      .map((r): SatRecord | null => {
         try {
           const satrec = twoline2satrec(r.line1, r.line2);
           if (satrec.error !== 0) return null;
@@ -51,6 +67,7 @@ async function fetchTLEs() {
             name: r.name,
             id: parseInt(r.line1.substring(2, 7).trim(), 10),
             inclination: satrec.inclo * (180 / Math.PI),
+            ...orbitParams(satrec),
           };
         } catch {
           return null;
@@ -109,6 +126,9 @@ function propagateAll() {
         lng,
         altKm,
         inclination: rec.inclination,
+        periodMin: rec.periodMin,
+        apogeeKm: rec.apogeeKm,
+        perigeeKm: rec.perigeeKm,
         targetLat,
         targetLng,
         targetAltKm,
