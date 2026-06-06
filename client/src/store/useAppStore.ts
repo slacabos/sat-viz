@@ -47,13 +47,19 @@ interface AppState {
 
   autoRotate: boolean;
   setAutoRotate: (v: boolean) => void;
+
+  mapStyle: 'dark' | 'realistic';
+  toggleMapStyle: () => void;
+
+  showBorders: boolean;
+  toggleBorders: () => void;
 }
 
 export const useAppStore = create<AppState>((set) => {
   let vesselMap = new Map<string, VesselPosition>();
 
   return {
-    layers: { satellites: true, aircraft: true, vessels: true },
+    layers: { aircraft: true, vessels: true, satellites: true },
     toggleLayer: (layer) => set((s) => ({ layers: { ...s.layers, [layer]: !s.layers[layer] } })),
     satelliteOrbits: { LEO: true, MEO: true, GEO: true },
     toggleSatelliteOrbit: (orbit) =>
@@ -104,5 +110,11 @@ export const useAppStore = create<AppState>((set) => {
 
     autoRotate: true,
     setAutoRotate: (v) => set({ autoRotate: v }),
+
+    mapStyle: 'dark',
+    toggleMapStyle: () => set((s) => ({ mapStyle: s.mapStyle === 'dark' ? 'realistic' : 'dark' })),
+
+    showBorders: true,
+    toggleBorders: () => set((s) => ({ showBorders: !s.showBorders })),
   };
 });

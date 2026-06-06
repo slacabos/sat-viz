@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useAppStore } from '../store/useAppStore';
 
 export function LayerControls() {
@@ -145,37 +146,111 @@ export function LayerControls() {
   );
 }
 
-export function RotationControl() {
+function IconBtn({
+  icon,
+  label,
+  active,
+  color,
+  onClick,
+}: {
+  icon: string;
+  label: string;
+  active: boolean;
+  color: string;
+  onClick: () => void;
+}) {
+  const [hovered, setHovered] = useState(false);
+  return (
+    <div
+      style={{ position: 'relative' }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      {hovered && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 'calc(100% + 6px)',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            background: 'rgba(0,0,0,0.85)',
+            color: 'rgba(255,255,255,0.9)',
+            padding: '4px 8px',
+            borderRadius: 4,
+            fontSize: 12,
+            whiteSpace: 'nowrap',
+            pointerEvents: 'none',
+            fontFamily: 'inherit',
+          }}
+        >
+          {label}
+        </div>
+      )}
+      <button
+        onClick={onClick}
+        style={{
+          width: 36,
+          height: 36,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderRadius: 8,
+          border: `1px solid ${active ? color + '66' : 'rgba(255,255,255,0.1)'}`,
+          background: active ? color + '22' : 'rgba(10,10,20,0.85)',
+          backdropFilter: 'blur(8px)',
+          color: active ? color : 'rgba(255,255,255,0.4)',
+          cursor: 'pointer',
+          fontSize: 16,
+          transition: 'all 0.15s',
+        }}
+      >
+        {icon}
+      </button>
+    </div>
+  );
+}
+
+export function GlobeControls() {
   const autoRotate = useAppStore((s) => s.autoRotate);
   const setAutoRotate = useAppStore((s) => s.setAutoRotate);
-  const rotateColor = '#a78bfa';
+  const mapStyle = useAppStore((s) => s.mapStyle);
+  const toggleMapStyle = useAppStore((s) => s.toggleMapStyle);
+  const showBorders = useAppStore((s) => s.showBorders);
+  const toggleBorders = useAppStore((s) => s.toggleBorders);
 
   return (
-    <button
-      onClick={() => setAutoRotate(!autoRotate)}
-      title={autoRotate ? 'Stop rotation' : 'Resume rotation'}
+    <div
       style={{
         position: 'fixed',
-        bottom: 52,
-        right: 20,
+        bottom: 20,
+        left: 20,
         zIndex: 100,
         display: 'flex',
-        alignItems: 'center',
+        flexDirection: 'row',
         gap: 8,
-        padding: '8px 14px',
-        borderRadius: 8,
-        border: `1px solid ${autoRotate ? rotateColor + '66' : 'rgba(255,255,255,0.1)'}`,
-        background: autoRotate ? rotateColor + '22' : 'rgba(10,10,20,0.85)',
-        backdropFilter: 'blur(8px)',
-        color: autoRotate ? rotateColor : 'rgba(255,255,255,0.4)',
-        cursor: 'pointer',
-        fontSize: 13,
-        fontFamily: 'inherit',
-        transition: 'all 0.15s',
       }}
     >
-      <span style={{ fontSize: 16 }}>{autoRotate ? '⟳' : '⏸'}</span>
-      <span style={{ fontWeight: 500 }}>Rotation</span>
-    </button>
+      <IconBtn
+        icon={autoRotate ? '⟳' : '⏸'}
+        label={autoRotate ? 'Stop rotation' : 'Resume rotation'}
+        active={autoRotate}
+        color="#a78bfa"
+        onClick={() => setAutoRotate(!autoRotate)}
+      />
+      <IconBtn
+        icon={mapStyle === 'dark' ? '🌑' : '🌍'}
+        label={mapStyle === 'dark' ? 'Switch to realistic' : 'Switch to dark map'}
+        active={mapStyle === 'dark'}
+        color="#94a3b8"
+        onClick={toggleMapStyle}
+      />
+      <IconBtn
+        icon="⬡"
+        label={showBorders ? 'Hide borders' : 'Show borders'}
+        active={showBorders}
+        color="#6ee7b7"
+        onClick={toggleBorders}
+      />
+    </div>
   );
 }

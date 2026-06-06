@@ -1,4 +1,4 @@
-import { useRef, useEffect, useState, memo } from 'react';
+import { useRef, useEffect, useState, useMemo, memo } from 'react';
 import Globe, { GlobeMethods } from 'react-globe.gl';
 import * as THREE from 'three';
 import { useAppStore } from '../store/useAppStore';
@@ -29,6 +29,18 @@ const GlobeView = memo(function GlobeView() {
   const setHoveredObject = useAppStore((s) => s.setHoveredObject);
   const autoRotate = useAppStore((s) => s.autoRotate);
   const setAutoRotate = useAppStore((s) => s.setAutoRotate);
+  const mapStyle = useAppStore((s) => s.mapStyle);
+  const showBorders = useAppStore((s) => s.showBorders);
+
+  const [countries, setCountries] = useState<object[]>([]);
+  useEffect(() => {
+    if (!showBorders || countries.length > 0) return;
+    fetch('/geo/countries.geojson')
+      .then((r) => r.json())
+      .then((data: { features?: object[] }) => setCountries(data.features ?? []));
+  }, [showBorders, countries.length]);
+
+  const darkMaterial = useMemo(() => new THREE.MeshPhongMaterial({ color: '#050a14' }), []);
 
   const { meshesRef, leoData, meoData, geoData } = useSatelliteInstances(globeRef, globeReady);
   const { meshRef: vesselMeshRef, dataRef: vesselData } = useVesselInstances(globeRef, globeReady);
@@ -177,12 +189,26 @@ const GlobeView = memo(function GlobeView() {
         ref={globeRef}
         width={dims.w}
         height={dims.h}
-        globeImageUrl="//unpkg.com/three-globe/example/img/earth-blue-marble.jpg"
-        bumpImageUrl="//unpkg.com/three-globe/example/img/earth-topology.png"
+        globeImageUrl={
+          mapStyle === 'realistic'
+            ? '//unpkg.com/three-globe/example/img/earth-blue-marble.jpg'
+            : undefined
+        }
+        bumpImageUrl={
+          mapStyle === 'realistic'
+            ? '//unpkg.com/three-globe/example/img/earth-topology.png'
+            : undefined
+        }
+        globeMaterial={mapStyle === 'dark' ? darkMaterial : undefined}
         backgroundImageUrl="//unpkg.com/three-globe/example/img/night-sky.png"
         showAtmosphere={true}
-        atmosphereColor="#3a7bd5"
+        atmosphereColor={mapStyle === 'dark' ? '#1a3a6b' : '#3a7bd5'}
         atmosphereAltitude={0.15}
+        polygonsData={showBorders ? countries : []}
+        polygonCapColor={() => (mapStyle === 'dark' ? '#0d1b2e' : 'rgba(0,0,0,0)')}
+        polygonSideColor={() => 'transparent'}
+        polygonStrokeColor={() => '#2a4a6b'}
+        polygonAltitude={0.002}
         onGlobeReady={() => setGlobeReady(true)}
       />
     </div>
