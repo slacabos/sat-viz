@@ -10,6 +10,7 @@ import type { VesselPosition } from '../types/vessel';
 
 const MAX_VESSELS = 50_000;
 const VESSEL_REL_ALT = altitudeScale(0.05);
+const PICK_BOUND_RADIUS = 102;
 
 export interface VesselInstances {
   meshRef: RefObject<THREE.InstancedMesh | null>;
@@ -34,18 +35,26 @@ export function useVesselInstances(
     }
 
     const geometry = new THREE.BoxGeometry(0.5, 0.2, 0.9);
+    const pickGeometry = new THREE.SphereGeometry(1.4, 8, 6);
     const material = new THREE.MeshLambertMaterial({ color: COLORS.vessel });
+    const pickMaterial = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 });
+    pickMaterial.colorWrite = false;
     const mesh = new THREE.InstancedMesh(geometry, material, MAX_VESSELS);
-    mesh.count = 0;
-    mesh.frustumCulled = false;
+    const pickMesh = new THREE.InstancedMesh(pickGeometry, pickMaterial, MAX_VESSELS);
+    for (const m of [mesh, pickMesh]) {
+      m.count = 0;
+      m.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), PICK_BOUND_RADIUS);
+      m.frustumCulled = false;
+    }
 
-    globeGroup.add(mesh);
-    meshRef.current = mesh;
+    globeGroup.add(mesh, pickMesh);
+    meshRef.current = pickMesh;
 
     function updateVessels(vessels: VesselPosition[]) {
       timePerf('vessels.instances.updateMs', () => {
         const count = Math.min(vessels.length, MAX_VESSELS);
         const instanceMatrix = mesh.instanceMatrix.array;
+        const pickInstanceMatrix = pickMesh.instanceMatrix.array;
         dataRef.current.length = 0;
 
         for (let i = 0; i < count; i++) {
@@ -69,18 +78,22 @@ export function useVesselInstances(
           instanceMatrix[mi + 13] = y;
           instanceMatrix[mi + 14] = z;
           instanceMatrix[mi + 15] = 1;
+          pickInstanceMatrix.set(instanceMatrix.subarray(mi, mi + 16), mi);
 
           dataRef.current.push(vessel);
         }
 
-        mesh.count = count;
-        mesh.instanceMatrix.needsUpdate = true;
+        for (const m of [mesh, pickMesh]) {
+          m.count = count;
+          m.instanceMatrix.needsUpdate = true;
+        }
         recordPerf('vessels.instances.count', count);
       });
     }
 
     function setVisible(visible: boolean) {
       mesh.visible = visible;
+      pickMesh.visible = visible;
     }
 
     const unsub = useAppStore.subscribe((state, prev) => {
@@ -94,9 +107,11 @@ export function useVesselInstances(
 
     return () => {
       unsub();
-      globeGroup.remove(mesh);
+      globeGroup.remove(mesh, pickMesh);
       geometry.dispose();
+      pickGeometry.dispose();
       material.dispose();
+      pickMaterial.dispose();
       meshRef.current = null;
       dataRef.current = [];
     };

@@ -3,6 +3,8 @@ import { useAppStore } from '../store/useAppStore';
 export function LayerControls() {
   const layers = useAppStore((s) => s.layers);
   const toggleLayer = useAppStore((s) => s.toggleLayer);
+  const satelliteOrbits = useAppStore((s) => s.satelliteOrbits);
+  const toggleSatelliteOrbit = useAppStore((s) => s.toggleSatelliteOrbit);
   const satelliteCount = useAppStore((s) => s.satellites.length);
   const airborneCount = useAppStore((s) => s.aircraft.filter((a) => !a.onGround).length);
   const vesselCount = useAppStore((s) => s.vessels.length);
@@ -28,6 +30,11 @@ export function LayerControls() {
       color: '#10b981',
       icon: '🚢',
     },
+  ];
+  const orbitFilters = [
+    { key: 'LEO' as const, label: 'LEO', color: '#22d3ee' },
+    { key: 'MEO' as const, label: 'MEO', color: '#818cf8' },
+    { key: 'GEO' as const, label: 'GEO', color: '#fbbf24' },
   ];
 
   return (
@@ -86,6 +93,54 @@ export function LayerControls() {
           </span>
         </button>
       ))}
+      <div
+        style={{
+          borderTop: '1px solid rgba(255,255,255,0.08)',
+          marginTop: 4,
+          paddingTop: 12,
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: 6,
+        }}
+      >
+        {orbitFilters.map((orbit) => {
+          const active = satelliteOrbits[orbit.key];
+          return (
+            <button
+              key={orbit.key}
+              onClick={() => toggleSatelliteOrbit(orbit.key)}
+              title={`${orbit.label} satellites`}
+              style={{
+                height: 28,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 5,
+                borderRadius: 6,
+                border: `1px solid ${active ? orbit.color + '88' : 'rgba(255,255,255,0.1)'}`,
+                background: active ? orbit.color + '1f' : 'rgba(255,255,255,0.03)',
+                color: active ? 'rgba(255,255,255,0.88)' : 'rgba(255,255,255,0.34)',
+                cursor: 'pointer',
+                fontSize: 11,
+                fontFamily: 'inherit',
+                fontWeight: 600,
+              }}
+            >
+              <span
+                style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: 999,
+                  background: orbit.color,
+                  opacity: active ? 1 : 0.35,
+                  boxShadow: active ? `0 0 10px ${orbit.color}` : 'none',
+                }}
+              />
+              {orbit.label}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

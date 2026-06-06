@@ -3,6 +3,7 @@ import type { SatellitePosition } from '../types/satellite';
 import type { AircraftState } from '../types/aircraft';
 import type { VesselPosition } from '../types/vessel';
 import { recordPerf, timePerf } from '../lib/perf';
+import type { OrbitClass } from '../lib/altitudeScale';
 
 export type SelectedObject =
   | { type: 'satellite'; data: SatellitePosition }
@@ -16,9 +17,13 @@ interface LayerVisibility {
   vessels: boolean;
 }
 
+type OrbitVisibility = Record<OrbitClass, boolean>;
+
 interface AppState {
   layers: LayerVisibility;
   toggleLayer: (layer: keyof LayerVisibility) => void;
+  satelliteOrbits: OrbitVisibility;
+  toggleSatelliteOrbit: (orbit: OrbitClass) => void;
 
   satellites: SatellitePosition[];
   aircraft: AircraftState[];
@@ -31,6 +36,8 @@ interface AppState {
 
   selectedObject: SelectedObject;
   setSelectedObject: (obj: SelectedObject) => void;
+  hoveredObject: SelectedObject;
+  setHoveredObject: (obj: SelectedObject) => void;
 
   lastUpdated: { satellites: number | null; aircraft: number | null; vessels: number | null };
   setLastUpdated: (layer: 'satellites' | 'aircraft' | 'vessels', ts: number) => void;
@@ -48,6 +55,11 @@ export const useAppStore = create<AppState>((set) => {
   return {
     layers: { satellites: true, aircraft: true, vessels: true },
     toggleLayer: (layer) => set((s) => ({ layers: { ...s.layers, [layer]: !s.layers[layer] } })),
+    satelliteOrbits: { LEO: true, MEO: true, GEO: true },
+    toggleSatelliteOrbit: (orbit) =>
+      set((s) => ({
+        satelliteOrbits: { ...s.satelliteOrbits, [orbit]: !s.satelliteOrbits[orbit] },
+      })),
 
     satellites: [],
     aircraft: [],
@@ -81,6 +93,8 @@ export const useAppStore = create<AppState>((set) => {
 
     selectedObject: null,
     setSelectedObject: (obj) => set({ selectedObject: obj }),
+    hoveredObject: null,
+    setHoveredObject: (obj) => set({ hoveredObject: obj }),
 
     lastUpdated: { satellites: null, aircraft: null, vessels: null },
     setLastUpdated: (layer, ts) => set((s) => ({ lastUpdated: { ...s.lastUpdated, [layer]: ts } })),

@@ -9,6 +9,7 @@ import { recordPerf, timePerf } from '../lib/perf';
 import type { AircraftState } from '../types/aircraft';
 
 const MAX_AIRCRAFT = 20_000;
+const PICK_BOUND_RADIUS = 102;
 
 export interface AircraftInstances {
   meshRef: RefObject<THREE.InstancedMesh | null>;
@@ -34,17 +35,25 @@ export function useAircraftInstances(
 
     const geometry = new THREE.ConeGeometry(0.3, 1.0, 4);
     geometry.rotateX(Math.PI / 2);
+    const pickGeometry = new THREE.SphereGeometry(1.4, 8, 6);
     const material = new THREE.MeshLambertMaterial({ color: COLORS.aircraft });
+    const pickMaterial = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 });
+    pickMaterial.colorWrite = false;
     const mesh = new THREE.InstancedMesh(geometry, material, MAX_AIRCRAFT);
-    mesh.count = 0;
-    mesh.frustumCulled = false;
+    const pickMesh = new THREE.InstancedMesh(pickGeometry, pickMaterial, MAX_AIRCRAFT);
+    for (const m of [mesh, pickMesh]) {
+      m.count = 0;
+      m.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), PICK_BOUND_RADIUS);
+      m.frustumCulled = false;
+    }
 
-    globeGroup.add(mesh);
-    meshRef.current = mesh;
+    globeGroup.add(mesh, pickMesh);
+    meshRef.current = pickMesh;
 
     function updateAircraft(aircraft: AircraftState[]) {
       timePerf('aircraft.instances.updateMs', () => {
         const instanceMatrix = mesh.instanceMatrix.array;
+        const pickInstanceMatrix = pickMesh.instanceMatrix.array;
         dataRef.current.length = 0;
 
         let count = 0;
@@ -76,19 +85,23 @@ export function useAircraftInstances(
           instanceMatrix[mi + 13] = y;
           instanceMatrix[mi + 14] = z;
           instanceMatrix[mi + 15] = 1;
+          pickInstanceMatrix.set(instanceMatrix.subarray(mi, mi + 16), mi);
 
           dataRef.current.push(plane);
           count += 1;
         }
 
-        mesh.count = count;
-        mesh.instanceMatrix.needsUpdate = true;
+        for (const m of [mesh, pickMesh]) {
+          m.count = count;
+          m.instanceMatrix.needsUpdate = true;
+        }
         recordPerf('aircraft.instances.count', count);
       });
     }
 
     function setVisible(visible: boolean) {
       mesh.visible = visible;
+      pickMesh.visible = visible;
     }
 
     const unsub = useAppStore.subscribe((state, prev) => {
@@ -102,9 +115,11 @@ export function useAircraftInstances(
 
     return () => {
       unsub();
-      globeGroup.remove(mesh);
+      globeGroup.remove(mesh, pickMesh);
       geometry.dispose();
+      pickGeometry.dispose();
       material.dispose();
+      pickMaterial.dispose();
       meshRef.current = null;
       dataRef.current = [];
     };

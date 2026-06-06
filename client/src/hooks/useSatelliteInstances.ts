@@ -10,6 +10,7 @@ import type { SatellitePosition } from '../types/satellite';
 
 const MAX_SATS = 12000;
 const CULL_THROTTLE_MS = 100;
+const PICK_BOUND_RADIUS = 120;
 // Cull satellites whose normalized direction has a dot product below this threshold
 // with the camera direction. -0.1 preserves near-horizon satellites to avoid pop-in.
 const CULL_THRESHOLD = -0.1;
@@ -61,6 +62,12 @@ export function useSatelliteInstances(
     const group = globeGroup;
 
     const geo = new THREE.SphereGeometry(0.4, 6, 4);
+    const pickGeo = new THREE.SphereGeometry(1.35, 8, 6);
+    const makePickMaterial = () => {
+      const material = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 });
+      material.colorWrite = false;
+      return material;
+    };
     const meshLEO = new THREE.InstancedMesh(
       geo,
       new THREE.MeshLambertMaterial({ color: COLORS.satellite }),
@@ -76,16 +83,22 @@ export function useSatelliteInstances(
       new THREE.MeshLambertMaterial({ color: '#fbbf24' }),
       MAX_SATS
     );
+    const pickLEO = new THREE.InstancedMesh(pickGeo, makePickMaterial(), MAX_SATS);
+    const pickMEO = new THREE.InstancedMesh(pickGeo, makePickMaterial(), MAX_SATS);
+    const pickGEO = new THREE.InstancedMesh(pickGeo, makePickMaterial(), MAX_SATS);
+    const visualMeshes: SatMeshes = [meshLEO, meshMEO, meshGEO];
+    const pickMeshes: SatMeshes = [pickLEO, pickMEO, pickGEO];
 
-    for (const m of [meshLEO, meshMEO, meshGEO]) {
+    for (const m of [...visualMeshes, ...pickMeshes]) {
       m.count = 0;
+      m.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0, 0), PICK_BOUND_RADIUS);
       // Disable Three.js frustum culling at the mesh level — the bounding sphere
       // at count=0 is degenerate, and per-instance culling is handled manually.
       m.frustumCulled = false;
     }
 
-    group.add(meshLEO, meshMEO, meshGEO);
-    meshesRef.current = [meshLEO, meshMEO, meshGEO];
+    group.add(...visualMeshes, ...pickMeshes);
+    meshesRef.current = pickMeshes;
 
     const camera = globeRef.current.camera();
     const scratchCameraLocal = new THREE.Vector3();
@@ -108,8 +121,8 @@ export function useSatelliteInstances(
       if (!satellitesVisible) return;
 
       timePerf('satellites.reCull.ms', () => {
-        const [mLEO, mMEO, mGEO] = meshesRef.current!;
-        const meshArr = [mLEO, mMEO, mGEO];
+        const meshArr = visualMeshes;
+        const pickMeshArr = meshesRef.current!;
 
         // Camera position in globe-local space (world → local strips globe rotation)
         scratchCameraLocal.copy(camera.position);
@@ -143,6 +156,7 @@ export function useSatelliteInstances(
           const src = i * 16;
           const dest = dst * 16;
           const instanceMatrix = meshArr[cls].instanceMatrix.array;
+          const pickInstanceMatrix = pickMeshArr[cls].instanceMatrix.array;
           instanceMatrix[dest] = mats[src];
           instanceMatrix[dest + 1] = mats[src + 1];
           instanceMatrix[dest + 2] = mats[src + 2];
@@ -159,12 +173,30 @@ export function useSatelliteInstances(
           instanceMatrix[dest + 13] = mats[src + 13];
           instanceMatrix[dest + 14] = mats[src + 14];
           instanceMatrix[dest + 15] = mats[src + 15];
+          pickInstanceMatrix[dest] = mats[src];
+          pickInstanceMatrix[dest + 1] = mats[src + 1];
+          pickInstanceMatrix[dest + 2] = mats[src + 2];
+          pickInstanceMatrix[dest + 3] = mats[src + 3];
+          pickInstanceMatrix[dest + 4] = mats[src + 4];
+          pickInstanceMatrix[dest + 5] = mats[src + 5];
+          pickInstanceMatrix[dest + 6] = mats[src + 6];
+          pickInstanceMatrix[dest + 7] = mats[src + 7];
+          pickInstanceMatrix[dest + 8] = mats[src + 8];
+          pickInstanceMatrix[dest + 9] = mats[src + 9];
+          pickInstanceMatrix[dest + 10] = mats[src + 10];
+          pickInstanceMatrix[dest + 11] = mats[src + 11];
+          pickInstanceMatrix[dest + 12] = mats[src + 12];
+          pickInstanceMatrix[dest + 13] = mats[src + 13];
+          pickInstanceMatrix[dest + 14] = mats[src + 14];
+          pickInstanceMatrix[dest + 15] = mats[src + 15];
           culled[cls].push(flatData[i]);
         }
 
         for (let m = 0; m < 3; m++) {
           meshArr[m].count = counts[m];
           meshArr[m].instanceMatrix.needsUpdate = true;
+          pickMeshArr[m].count = counts[m];
+          pickMeshArr[m].instanceMatrix.needsUpdate = true;
         }
         recordPerf('satellites.rendered.count', counts[0] + counts[1] + counts[2]);
       });
@@ -250,34 +282,49 @@ export function useSatelliteInstances(
     }
 
     // ── Layer visibility ─────────────────────────────────────────────────────
-    function setVisible(v: boolean) {
-      satellitesVisible = v;
-      for (const m of meshesRef.current!) m.visible = v;
-      if (v) reCullNow();
+    function syncVisibility() {
+      const state = useAppStore.getState();
+      satellitesVisible = state.layers.satellites;
+      const visible = [
+        satellitesVisible && state.satelliteOrbits.LEO,
+        satellitesVisible && state.satelliteOrbits.MEO,
+        satellitesVisible && state.satelliteOrbits.GEO,
+      ];
+      for (let i = 0; i < 3; i++) {
+        visualMeshes[i].visible = visible[i];
+        meshesRef.current![i].visible = visible[i];
+      }
+      if (satellitesVisible) reCullNow();
     }
 
     // Imperative Zustand subscriptions — no React re-renders triggered
     const unsub = useAppStore.subscribe((state, prev) => {
       if (state.satellites !== prev.satellites) updateMatrices(state.satellites);
-      if (state.layers.satellites !== prev.layers.satellites) setVisible(state.layers.satellites);
+      if (
+        state.layers.satellites !== prev.layers.satellites ||
+        state.satelliteOrbits !== prev.satelliteOrbits
+      ) {
+        syncVisibility();
+      }
     });
 
     // Seed with whatever is already in the store (e.g. if globe mounts after first tick)
     const initial = useAppStore.getState();
     if (initial.satellites.length > 0) updateMatrices(initial.satellites);
-    setVisible(initial.layers.satellites);
+    syncVisibility();
 
     return () => {
       unsub();
       controls.removeEventListener('change', scheduleReCull);
       if (pendingCullTimer) clearTimeout(pendingCullTimer);
-      for (const m of meshesRef.current!) {
+      for (const m of [...visualMeshes, ...pickMeshes]) {
         group.remove(m);
         const mat = m.material;
         if (Array.isArray(mat)) mat.forEach((x) => x.dispose());
         else mat.dispose();
       }
       geo.dispose();
+      pickGeo.dispose();
       meshesRef.current = null;
       globeGroupRef.current = null;
     };
