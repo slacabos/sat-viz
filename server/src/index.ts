@@ -5,7 +5,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
 import { aircraftRouter } from './routes/aircraft.js';
-import { vesselsRouter } from './routes/vessels.js';
+import { initializeVesselRelay, vesselsRouter } from './routes/vessels.js';
 import { satellitesRouter } from './routes/satellites.js';
 
 config({ path: path.resolve(__dirname, '../../.env') });
@@ -25,8 +25,16 @@ app.use('/api/satellites', satellitesRouter);
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
-if (process.env.NODE_ENV !== 'test') {
+async function startServer() {
+  await initializeVesselRelay();
   app.listen(PORT, () => console.log(`Server running on http://localhost:${PORT}`));
 }
 
-export { app };
+if (process.env.NODE_ENV !== 'test') {
+  startServer().catch((err: unknown) => {
+    console.error('Failed to start server', err);
+    process.exit(1);
+  });
+}
+
+export { app, startServer };

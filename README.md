@@ -15,6 +15,7 @@ Real-time 3D globe tracking satellites, aircraft, and marine vessels using free 
 ## Prerequisites
 
 - Node.js 18+
+- Docker Compose for local Valkey
 - A free AISStream API key (sign in at [aisstream.io](https://aisstream.io) with GitHub)
 
 ## Setup
@@ -26,6 +27,8 @@ npm install
 
 cp .env.example .env
 # Edit .env and set AISSTREAM_KEY
+
+docker compose up -d valkey
 ```
 
 ## Run
@@ -41,6 +44,7 @@ Opens the frontend at **http://localhost:5173**. The Express proxy runs on **htt
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `AISSTREAM_KEY` | Yes | Server-only AISStream API key for vessel tracking |
+| `VALKEY_URL` | Yes | Valkey connection URL for vessel cache, pub/sub, and relay leadership |
 | `PORT` | No | Express server port (default: 3001) |
 | `CLIENT_ORIGIN` | No | CORS origin for the client (default: `http://localhost:5173`) |
 | `OPENSKY_CLIENT_ID` | No | OpenSky OAuth2 client ID — raises daily limit from 400 → 4000 credits |
@@ -58,8 +62,22 @@ OpenSky Network (no CORS)
         └─> client polls every 60s → store → Globe
 
 AISStream WebSocket
-  └─> Express SSE relay (/api/vessels/stream) — server keeps API key private
+  └─> Express SSE relay (/api/vessels/stream) — Valkey cache + leadership
         └─> store → Globe
+```
+
+## Local Valkey
+
+The server requires Valkey before it will start:
+
+```bash
+docker compose up -d valkey
+```
+
+Stop the local Valkey container when you are done:
+
+```bash
+docker compose down
 ```
 
 ## UI

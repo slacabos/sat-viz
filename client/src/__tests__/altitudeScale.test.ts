@@ -10,12 +10,12 @@ describe('altitudeScale', () => {
     expect(altitudeScale(-100)).toBe(0);
   });
 
-  it('ISS at ~400km is ~0.063 globe radii', () => {
-    expect(altitudeScale(400)).toBeCloseTo(0.0628, 3);
+  it('ISS at ~400km is ~0.029 globe radii', () => {
+    expect(altitudeScale(400)).toBeCloseTo(0.029, 3);
   });
 
-  it('GEO at 35786km is ~5.6 globe radii', () => {
-    expect(altitudeScale(35786)).toBeCloseTo(5.618, 2);
+  it('GEO at 35786km is ~0.31 globe radii', () => {
+    expect(altitudeScale(35786)).toBeCloseTo(0.313, 3);
   });
 
   it('aircraft at 10km is a tiny fraction above surface', () => {

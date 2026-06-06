@@ -1,7 +1,16 @@
-.PHONY: dev build start test lint format install clean
+.PHONY: up dev valkey down build start test lint format install clean
+
+up: valkey
+	npm run dev
 
 dev:
 	npm run dev
+
+valkey:
+	docker compose up -d valkey
+
+down:
+	docker compose down
 
 install:
 	npm install
