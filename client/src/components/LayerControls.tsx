@@ -11,13 +11,6 @@ export function LayerControls() {
   const vesselCount = useAppStore((s) => s.vessels.length);
   const buttons = [
     {
-      key: 'satellites' as const,
-      label: 'Satellites',
-      count: satelliteCount,
-      color: '#22d3ee',
-      icon: '🛰',
-    },
-    {
       key: 'aircraft' as const,
       label: 'Aircraft',
       count: airborneCount,
@@ -30,6 +23,13 @@ export function LayerControls() {
       count: vesselCount,
       color: '#10b981',
       icon: '🚢',
+    },
+    {
+      key: 'satellites' as const,
+      label: 'Satellites',
+      count: satelliteCount,
+      color: '#22d3ee',
+      icon: '🛰',
     },
   ];
   const orbitFilters = [
