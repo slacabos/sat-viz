@@ -3,9 +3,15 @@ import type { RefObject } from 'react';
 import type { GlobeMethods } from 'react-globe.gl';
 import * as THREE from 'three';
 import { useAppStore } from '../store/useAppStore';
-import { classifyOrbit, satPos3, SAT_REL_ALT } from '../lib/altitudeScale';
+import { classifyOrbit, SAT_REL_ALT } from '../lib/altitudeScale';
 import { COLORS } from '../lib/colorConfig';
 import { recordPerf, timePerf } from '../lib/perf';
+import {
+  clampSampleProgress,
+  interpolateShellVector,
+  satelliteShellVectors,
+  SATELLITE_FRAME_MS,
+} from '../lib/satelliteAnimation';
 import type { SatellitePosition } from '../types/satellite';
 
 const MAX_SATS = 12000;
@@ -41,8 +47,13 @@ export function useSatelliteInstances(
   const meshesRef = useRef<SatMeshes | null>(null);
   const globeGroupRef = useRef<THREE.Group | null>(null);
 
-  // Pre-computed buffers for the culling pass (allocated once on first satellite load)
-  const preMatrices = useRef<Float32Array>(new Float32Array(MAX_SATS * 16));
+  // Pre-computed buffers for the culling and animation passes.
+  const renderMatrices = useRef<Float32Array>(new Float32Array(MAX_SATS * 16));
+  const startPositions = useRef<Float32Array>(new Float32Array(MAX_SATS * 3));
+  const endPositions = useRef<Float32Array>(new Float32Array(MAX_SATS * 3));
+  const shellRadii = useRef<Float32Array>(new Float32Array(MAX_SATS));
+  const sampleTimes = useRef<Float64Array>(new Float64Array(MAX_SATS));
+  const targetTimes = useRef<Float64Array>(new Float64Array(MAX_SATS));
   const satDirs = useRef<Float32Array>(new Float32Array(MAX_SATS * 3));
   const satClass = useRef<Uint8Array>(new Uint8Array(MAX_SATS));
   const satDataFlat = useRef<SatellitePosition[]>([]);
@@ -104,12 +115,110 @@ export function useSatelliteInstances(
     const scratchCameraLocal = new THREE.Vector3();
     let satellitesVisible = true;
     let lastCullAt = 0;
+    let lastFrameAt = 0;
+    let animationFrame: number | null = null;
     let pendingCullTimer: ReturnType<typeof setTimeout> | null = null;
+    const visibleSourceIndices = [
+      new Int32Array(MAX_SATS),
+      new Int32Array(MAX_SATS),
+      new Int32Array(MAX_SATS),
+    ];
     // OrbitControls extends EventDispatcher; cast to access addEventListener
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const controls = globeRef.current.controls() as any as THREE.EventDispatcher<
       Record<string, THREE.Event>
     >;
+
+    function updateRenderMatrices(nowMs: number) {
+      const n = totalCount.current;
+      const starts = startPositions.current;
+      const ends = endPositions.current;
+      const radii = shellRadii.current;
+      const fromTimes = sampleTimes.current;
+      const toTimes = targetTimes.current;
+      const dirs = satDirs.current;
+      const mats = renderMatrices.current;
+
+      for (let i = 0; i < n; i++) {
+        const pi = i * 3;
+        const progress = clampSampleProgress(nowMs, fromTimes[i], toTimes[i]);
+        const [x, y, z] = interpolateShellVector(
+          starts.subarray(pi, pi + 3),
+          ends.subarray(pi, pi + 3),
+          radii[i],
+          progress
+        );
+
+        dirs[pi] = x / radii[i];
+        dirs[pi + 1] = y / radii[i];
+        dirs[pi + 2] = z / radii[i];
+
+        const mi = i * 16;
+        mats[mi + 12] = x;
+        mats[mi + 13] = y;
+        mats[mi + 14] = z;
+      }
+    }
+
+    function copyMatrix(
+      src: ArrayLike<number>,
+      dest: ArrayLike<number>,
+      srcOffset: number,
+      destOffset: number
+    ) {
+      const target = dest as number[];
+      target[destOffset] = src[srcOffset];
+      target[destOffset + 1] = src[srcOffset + 1];
+      target[destOffset + 2] = src[srcOffset + 2];
+      target[destOffset + 3] = src[srcOffset + 3];
+      target[destOffset + 4] = src[srcOffset + 4];
+      target[destOffset + 5] = src[srcOffset + 5];
+      target[destOffset + 6] = src[srcOffset + 6];
+      target[destOffset + 7] = src[srcOffset + 7];
+      target[destOffset + 8] = src[srcOffset + 8];
+      target[destOffset + 9] = src[srcOffset + 9];
+      target[destOffset + 10] = src[srcOffset + 10];
+      target[destOffset + 11] = src[srcOffset + 11];
+      target[destOffset + 12] = src[srcOffset + 12];
+      target[destOffset + 13] = src[srcOffset + 13];
+      target[destOffset + 14] = src[srcOffset + 14];
+      target[destOffset + 15] = src[srcOffset + 15];
+    }
+
+    function paintVisibleInstances() {
+      const mats = renderMatrices.current;
+      const meshArr = visualMeshes;
+      const pickMeshArr = meshesRef.current!;
+
+      for (let cls = 0; cls < 3; cls++) {
+        const count = meshArr[cls].count;
+        const sources = visibleSourceIndices[cls];
+        const instanceMatrix = meshArr[cls].instanceMatrix.array;
+        const pickInstanceMatrix = pickMeshArr[cls].instanceMatrix.array;
+
+        for (let dst = 0; dst < count; dst++) {
+          const src = sources[dst] * 16;
+          const dest = dst * 16;
+          copyMatrix(mats, instanceMatrix, src, dest);
+          copyMatrix(mats, pickInstanceMatrix, src, dest);
+        }
+
+        meshArr[cls].instanceMatrix.needsUpdate = true;
+        pickMeshArr[cls].instanceMatrix.needsUpdate = true;
+      }
+    }
+
+    function animateSatellites(now: number) {
+      animationFrame = requestAnimationFrame(animateSatellites);
+      if (!satellitesVisible || totalCount.current === 0) return;
+      if (now - lastFrameAt < SATELLITE_FRAME_MS) return;
+
+      lastFrameAt = now;
+      updateRenderMatrices(Date.now());
+      paintVisibleInstances();
+    }
+
+    animationFrame = requestAnimationFrame(animateSatellites);
 
     // ── reCull ──────────────────────────────────────────────────────────────
     // Runs every time the camera moves (OrbitControls fires 'change' each frame
@@ -132,7 +241,7 @@ export function useSatelliteInstances(
           cz = scratchCameraLocal.z;
 
         const dirs = satDirs.current;
-        const mats = preMatrices.current;
+        const mats = renderMatrices.current;
         const classes = satClass.current;
         const n = totalCount.current;
 
@@ -152,43 +261,13 @@ export function useSatelliteInstances(
 
           const cls = classes[i];
           const dst = counts[cls]++;
-          // Direct typed-array copy: 16 floats from global preMatrices → mesh instanceMatrix
+          visibleSourceIndices[cls][dst] = i;
           const src = i * 16;
           const dest = dst * 16;
           const instanceMatrix = meshArr[cls].instanceMatrix.array;
           const pickInstanceMatrix = pickMeshArr[cls].instanceMatrix.array;
-          instanceMatrix[dest] = mats[src];
-          instanceMatrix[dest + 1] = mats[src + 1];
-          instanceMatrix[dest + 2] = mats[src + 2];
-          instanceMatrix[dest + 3] = mats[src + 3];
-          instanceMatrix[dest + 4] = mats[src + 4];
-          instanceMatrix[dest + 5] = mats[src + 5];
-          instanceMatrix[dest + 6] = mats[src + 6];
-          instanceMatrix[dest + 7] = mats[src + 7];
-          instanceMatrix[dest + 8] = mats[src + 8];
-          instanceMatrix[dest + 9] = mats[src + 9];
-          instanceMatrix[dest + 10] = mats[src + 10];
-          instanceMatrix[dest + 11] = mats[src + 11];
-          instanceMatrix[dest + 12] = mats[src + 12];
-          instanceMatrix[dest + 13] = mats[src + 13];
-          instanceMatrix[dest + 14] = mats[src + 14];
-          instanceMatrix[dest + 15] = mats[src + 15];
-          pickInstanceMatrix[dest] = mats[src];
-          pickInstanceMatrix[dest + 1] = mats[src + 1];
-          pickInstanceMatrix[dest + 2] = mats[src + 2];
-          pickInstanceMatrix[dest + 3] = mats[src + 3];
-          pickInstanceMatrix[dest + 4] = mats[src + 4];
-          pickInstanceMatrix[dest + 5] = mats[src + 5];
-          pickInstanceMatrix[dest + 6] = mats[src + 6];
-          pickInstanceMatrix[dest + 7] = mats[src + 7];
-          pickInstanceMatrix[dest + 8] = mats[src + 8];
-          pickInstanceMatrix[dest + 9] = mats[src + 9];
-          pickInstanceMatrix[dest + 10] = mats[src + 10];
-          pickInstanceMatrix[dest + 11] = mats[src + 11];
-          pickInstanceMatrix[dest + 12] = mats[src + 12];
-          pickInstanceMatrix[dest + 13] = mats[src + 13];
-          pickInstanceMatrix[dest + 14] = mats[src + 14];
-          pickInstanceMatrix[dest + 15] = mats[src + 15];
+          copyMatrix(mats, instanceMatrix, src, dest);
+          copyMatrix(mats, pickInstanceMatrix, src, dest);
           culled[cls].push(flatData[i]);
         }
 
@@ -232,16 +311,21 @@ export function useSatelliteInstances(
 
     // ── updateMatrices ──────────────────────────────────────────────────────
     // Called every 10 seconds when the worker delivers new satellite positions.
-    // Builds the pre-computed buffers (preMatrices, satDirs, satClass) then
-    // immediately triggers a reCull so the scene reflects the new data.
+    // Builds the animation buffers then immediately triggers a reCull so the
+    // scene reflects the new data.
     function updateMatrices(satellites: SatellitePosition[]) {
       const n = Math.min(satellites.length, MAX_SATS);
       totalCount.current = n;
       satDataFlat.current = satellites.slice(0, n);
 
-      const dirs = satDirs.current;
-      const mats = preMatrices.current;
+      const starts = startPositions.current;
+      const ends = endPositions.current;
+      const radii = shellRadii.current;
+      const fromTimes = sampleTimes.current;
+      const toTimes = targetTimes.current;
+      const mats = renderMatrices.current;
       const classes = satClass.current;
+      const now = Date.now();
 
       for (let i = 0; i < n; i++) {
         const sat = satellites[i];
@@ -249,14 +333,21 @@ export function useSatelliteInstances(
         const relAlt = SAT_REL_ALT[cls];
         classes[i] = cls === 'LEO' ? 0 : cls === 'MEO' ? 1 : 2;
 
-        const [x, y, z] = satPos3(sat.lat, sat.lng, relAlt);
-
-        // Normalized direction for cull dot-product test
-        const r = Math.sqrt(x * x + y * y + z * z);
         const di = i * 3;
-        dirs[di] = x / r;
-        dirs[di + 1] = y / r;
-        dirs[di + 2] = z / r;
+        const vectors = satelliteShellVectors(sat, relAlt);
+        starts[di] = vectors.start[0];
+        starts[di + 1] = vectors.start[1];
+        starts[di + 2] = vectors.start[2];
+        ends[di] = vectors.end[0];
+        ends[di + 1] = vectors.end[1];
+        ends[di + 2] = vectors.end[2];
+        radii[i] = Math.sqrt(
+          vectors.start[0] * vectors.start[0] +
+            vectors.start[1] * vectors.start[1] +
+            vectors.start[2] * vectors.start[2]
+        );
+        fromTimes[i] = sat.sampleTimeMs ?? now;
+        toTimes[i] = sat.targetTimeMs ?? fromTimes[i];
 
         // Column-major identity+translation matrix layout expected by Three.js
         const mi = i * 16;
@@ -272,12 +363,13 @@ export function useSatelliteInstances(
         mats[mi + 9] = 0;
         mats[mi + 10] = 1;
         mats[mi + 11] = 0;
-        mats[mi + 12] = x;
-        mats[mi + 13] = y;
-        mats[mi + 14] = z;
+        mats[mi + 12] = vectors.start[0];
+        mats[mi + 13] = vectors.start[1];
+        mats[mi + 14] = vectors.start[2];
         mats[mi + 15] = 1;
       }
 
+      updateRenderMatrices(now);
       reCullNow();
     }
 
@@ -316,6 +408,7 @@ export function useSatelliteInstances(
     return () => {
       unsub();
       controls.removeEventListener('change', scheduleReCull);
+      if (animationFrame != null) cancelAnimationFrame(animationFrame);
       if (pendingCullTimer) clearTimeout(pendingCullTimer);
       for (const m of [...visualMeshes, ...pickMeshes]) {
         group.remove(m);

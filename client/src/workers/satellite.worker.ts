@@ -66,24 +66,55 @@ async function fetchTLEs() {
 
 function propagateAll() {
   if (records.length === 0) return;
-  const date = new Date();
+  const sampleTimeMs = Date.now();
+  const date = new Date(sampleTimeMs);
+  const targetTimeMs = sampleTimeMs + PROPAGATE_INTERVAL_MS;
+  const targetDate = new Date(targetTimeMs);
   const positions: SatellitePosition[] = [];
 
   for (const rec of records) {
     try {
       const posVel = propagate(rec.satrec, date);
       if (!posVel || typeof posVel.position === 'boolean') continue;
+      const targetPosVel = propagate(rec.satrec, targetDate);
+      if (!targetPosVel || typeof targetPosVel.position === 'boolean') continue;
 
       const gmst = gstime(date);
       const geo = eciToGeodetic(posVel.position as EciVec3<number>, gmst);
+      const targetGmst = gstime(targetDate);
+      const targetGeo = eciToGeodetic(targetPosVel.position as EciVec3<number>, targetGmst);
 
       const lat = degreesLat(geo.latitude);
       const lng = degreesLong(geo.longitude);
       const altKm = geo.height;
+      const targetLat = degreesLat(targetGeo.latitude);
+      const targetLng = degreesLong(targetGeo.longitude);
+      const targetAltKm = targetGeo.height;
 
-      if (isNaN(lat) || isNaN(lng) || isNaN(altKm)) continue;
+      if (
+        isNaN(lat) ||
+        isNaN(lng) ||
+        isNaN(altKm) ||
+        isNaN(targetLat) ||
+        isNaN(targetLng) ||
+        isNaN(targetAltKm)
+      ) {
+        continue;
+      }
 
-      positions.push({ id: rec.id, name: rec.name, lat, lng, altKm, inclination: rec.inclination });
+      positions.push({
+        id: rec.id,
+        name: rec.name,
+        lat,
+        lng,
+        altKm,
+        inclination: rec.inclination,
+        targetLat,
+        targetLng,
+        targetAltKm,
+        sampleTimeMs,
+        targetTimeMs,
+      });
     } catch {
       // skip bad records
     }

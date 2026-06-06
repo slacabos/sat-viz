@@ -5,13 +5,26 @@ import * as THREE from 'three';
 import { useAppStore, type SelectedObject } from '../store/useAppStore';
 import { altitudeScale, classifyOrbit, satPos3, SAT_REL_ALT } from '../lib/altitudeScale';
 import { COLORS } from '../lib/colorConfig';
+import {
+  clampSampleProgress,
+  interpolateShellVector,
+  satelliteShellVectors,
+  SATELLITE_FRAME_MS,
+} from '../lib/satelliteAnimation';
 
-function objectPosition(obj: SelectedObject): [number, number, number] | null {
+function objectPosition(obj: SelectedObject, nowMs = Date.now()): [number, number, number] | null {
   if (!obj) return null;
 
   if (obj.type === 'satellite') {
     const orbit = classifyOrbit(obj.data.altKm);
-    return satPos3(obj.data.lat, obj.data.lng, SAT_REL_ALT[orbit]);
+    const vectors = satelliteShellVectors(obj.data, SAT_REL_ALT[orbit]);
+    const radius = Math.sqrt(
+      vectors.start[0] * vectors.start[0] +
+        vectors.start[1] * vectors.start[1] +
+        vectors.start[2] * vectors.start[2]
+    );
+    const progress = clampSampleProgress(nowMs, obj.data.sampleTimeMs, obj.data.targetTimeMs);
+    return interpolateShellVector(vectors.start, vectors.end, radius, progress);
   }
 
   if (obj.type === 'aircraft') {
@@ -30,8 +43,8 @@ function objectColor(obj: SelectedObject): string {
   return COLORS.vessel;
 }
 
-function updateMarker(mesh: THREE.Mesh, obj: SelectedObject, scale: number) {
-  const pos = objectPosition(obj);
+function updateMarker(mesh: THREE.Mesh, obj: SelectedObject, scale: number, nowMs = Date.now()) {
+  const pos = objectPosition(obj, nowMs);
   mesh.visible = Boolean(pos);
   if (!pos) return;
 
@@ -77,6 +90,10 @@ export function useObjectHighlights(globeRef: RefObject<GlobeMethods | undefined
     });
     const selectedMesh = new THREE.Mesh(selectedGeometry, selectedMaterial);
     const hoverMesh = new THREE.Mesh(hoverGeometry, hoverMaterial);
+    let selectedObject: SelectedObject = null;
+    let hoveredObject: SelectedObject = null;
+    let animationFrame: number | null = null;
+    let lastFrameAt = 0;
 
     selectedMesh.visible = false;
     hoverMesh.visible = false;
@@ -84,8 +101,28 @@ export function useObjectHighlights(globeRef: RefObject<GlobeMethods | undefined
     hoverMesh.renderOrder = 9;
     globeGroup.add(selectedMesh, hoverMesh);
 
-    const syncSelected = (obj: SelectedObject) => updateMarker(selectedMesh, obj, 0.9);
-    const syncHovered = (obj: SelectedObject) => updateMarker(hoverMesh, obj, 1.2);
+    const syncSelected = (obj: SelectedObject) => {
+      selectedObject = obj;
+      updateMarker(selectedMesh, obj, 0.9);
+    };
+    const syncHovered = (obj: SelectedObject) => {
+      hoveredObject = obj;
+      updateMarker(hoverMesh, obj, 1.2);
+    };
+
+    const animateMarkers = (now: number) => {
+      animationFrame = requestAnimationFrame(animateMarkers);
+      if (now - lastFrameAt < SATELLITE_FRAME_MS) return;
+      lastFrameAt = now;
+
+      const wallClockNow = Date.now();
+      if (selectedObject?.type === 'satellite') {
+        updateMarker(selectedMesh, selectedObject, 0.9, wallClockNow);
+      }
+      if (hoveredObject?.type === 'satellite') {
+        updateMarker(hoverMesh, hoveredObject, 1.2, wallClockNow);
+      }
+    };
 
     const unsub = useAppStore.subscribe((state, prev) => {
       if (state.selectedObject !== prev.selectedObject) syncSelected(state.selectedObject);
@@ -95,9 +132,11 @@ export function useObjectHighlights(globeRef: RefObject<GlobeMethods | undefined
     const initial = useAppStore.getState();
     syncSelected(initial.selectedObject);
     syncHovered(initial.hoveredObject);
+    animationFrame = requestAnimationFrame(animateMarkers);
 
     return () => {
       unsub();
+      if (animationFrame != null) cancelAnimationFrame(animationFrame);
       globeGroup.remove(selectedMesh, hoverMesh);
       selectedGeometry.dispose();
       hoverGeometry.dispose();

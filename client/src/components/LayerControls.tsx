@@ -222,7 +222,7 @@ export function GlobeControls() {
     <div
       style={{
         position: 'fixed',
-        bottom: 20,
+        bottom: 56,
         left: 20,
         zIndex: 100,
         display: 'flex',

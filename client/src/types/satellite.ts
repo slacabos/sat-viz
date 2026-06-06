@@ -11,4 +11,9 @@ export interface SatellitePosition {
   lng: number;
   altKm: number;
   inclination: number;
+  targetLat?: number;
+  targetLng?: number;
+  targetAltKm?: number;
+  sampleTimeMs?: number;
+  targetTimeMs?: number;
 }

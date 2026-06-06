@@ -73,7 +73,25 @@ export const useAppStore = create<AppState>((set) => {
 
     setSatellites: (data) => {
       recordPerf('satellites.store.count', data.length);
-      set({ satellites: data });
+      set((state) => {
+        const byId = new Map(data.map((sat) => [sat.id, sat]));
+        const selectedObject =
+          state.selectedObject?.type === 'satellite'
+            ? {
+                type: 'satellite' as const,
+                data: byId.get(state.selectedObject.data.id) ?? state.selectedObject.data,
+              }
+            : state.selectedObject;
+        const hoveredObject =
+          state.hoveredObject?.type === 'satellite'
+            ? {
+                type: 'satellite' as const,
+                data: byId.get(state.hoveredObject.data.id) ?? state.hoveredObject.data,
+              }
+            : state.hoveredObject;
+
+        return { satellites: data, selectedObject, hoveredObject };
+      });
     },
     setAircraft: (data) => {
       recordPerf('aircraft.store.count', data.length);
