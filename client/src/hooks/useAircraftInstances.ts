@@ -10,10 +10,57 @@ import type { AircraftState } from '../types/aircraft';
 
 const MAX_AIRCRAFT = 20_000;
 const PICK_BOUND_RADIUS = 102;
+const DEG2RAD = Math.PI / 180;
+const MIN_AIRCRAFT_REL_ALT = 0.006;
 
 export interface AircraftInstances {
   meshRef: RefObject<THREE.InstancedMesh | null>;
   dataRef: RefObject<AircraftState[]>;
+}
+
+function writeAircraftMatrix(
+  target: ArrayLike<number>,
+  offset: number,
+  lat: number,
+  lng: number,
+  relAlt: number,
+  headingDeg: number
+) {
+  const [x, y, z] = satPos3(lat, lng, relAlt);
+  const latRad = lat * DEG2RAD;
+  const theta = (90 - lng) * DEG2RAD;
+  const heading = headingDeg * DEG2RAD;
+
+  const up = new THREE.Vector3(x, y, z).normalize();
+  const east = new THREE.Vector3(Math.sin(theta), 0, -Math.cos(theta)).normalize();
+  const north = new THREE.Vector3(
+    -Math.sin(latRad) * Math.cos(theta),
+    Math.cos(latRad),
+    -Math.sin(latRad) * Math.sin(theta)
+  ).normalize();
+  const forward = north
+    .multiplyScalar(Math.cos(heading))
+    .add(east.multiplyScalar(Math.sin(heading)))
+    .normalize();
+  const right = new THREE.Vector3().crossVectors(up, forward).normalize();
+  const out = target as number[];
+
+  out[offset] = right.x;
+  out[offset + 1] = right.y;
+  out[offset + 2] = right.z;
+  out[offset + 3] = 0;
+  out[offset + 4] = up.x;
+  out[offset + 5] = up.y;
+  out[offset + 6] = up.z;
+  out[offset + 7] = 0;
+  out[offset + 8] = forward.x;
+  out[offset + 9] = forward.y;
+  out[offset + 10] = forward.z;
+  out[offset + 11] = 0;
+  out[offset + 12] = x;
+  out[offset + 13] = y;
+  out[offset + 14] = z;
+  out[offset + 15] = 1;
 }
 
 export function useAircraftInstances(
@@ -33,10 +80,22 @@ export function useAircraftInstances(
       return;
     }
 
-    const geometry = new THREE.ConeGeometry(0.3, 1.0, 4);
+    const markerShape = new THREE.Shape();
+    markerShape.moveTo(0, 0.32);
+    markerShape.lineTo(-0.16, -0.18);
+    markerShape.lineTo(0.16, -0.18);
+    markerShape.closePath();
+    const geometry = new THREE.ExtrudeGeometry(markerShape, {
+      depth: 0.04,
+      bevelEnabled: false,
+    });
+    geometry.translate(0, 0, -0.02);
     geometry.rotateX(Math.PI / 2);
-    const pickGeometry = new THREE.SphereGeometry(1.4, 8, 6);
-    const material = new THREE.MeshLambertMaterial({ color: COLORS.aircraft });
+    const pickGeometry = new THREE.SphereGeometry(0.7, 8, 6);
+    const material = new THREE.MeshLambertMaterial({
+      color: COLORS.aircraft,
+      side: THREE.DoubleSide,
+    });
     const pickMaterial = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 });
     pickMaterial.colorWrite = false;
     const mesh = new THREE.InstancedMesh(geometry, material, MAX_AIRCRAFT);
@@ -62,29 +121,16 @@ export function useAircraftInstances(
           if (plane.lat == null || plane.lon == null || plane.onGround) continue;
 
           const altitudeM = plane.baroAltitude ?? plane.geoAltitude ?? 10_000;
-          const relAlt = altitudeScale(altitudeM / 1000);
-          const [x, y, z] = satPos3(plane.lat, plane.lon, relAlt);
-          const heading = ((plane.trueTrack ?? 0) * Math.PI) / 180;
-          const cos = Math.cos(heading);
-          const sin = Math.sin(heading);
+          const relAlt = Math.max(altitudeScale(altitudeM / 1000), MIN_AIRCRAFT_REL_ALT);
           const mi = count * 16;
-
-          instanceMatrix[mi] = cos;
-          instanceMatrix[mi + 1] = 0;
-          instanceMatrix[mi + 2] = -sin;
-          instanceMatrix[mi + 3] = 0;
-          instanceMatrix[mi + 4] = 0;
-          instanceMatrix[mi + 5] = 1;
-          instanceMatrix[mi + 6] = 0;
-          instanceMatrix[mi + 7] = 0;
-          instanceMatrix[mi + 8] = sin;
-          instanceMatrix[mi + 9] = 0;
-          instanceMatrix[mi + 10] = cos;
-          instanceMatrix[mi + 11] = 0;
-          instanceMatrix[mi + 12] = x;
-          instanceMatrix[mi + 13] = y;
-          instanceMatrix[mi + 14] = z;
-          instanceMatrix[mi + 15] = 1;
+          writeAircraftMatrix(
+            instanceMatrix,
+            mi,
+            plane.lat,
+            plane.lon,
+            relAlt,
+            plane.trueTrack ?? 0
+          );
           pickInstanceMatrix.set(instanceMatrix.subarray(mi, mi + 16), mi);
 
           dataRef.current.push(plane);

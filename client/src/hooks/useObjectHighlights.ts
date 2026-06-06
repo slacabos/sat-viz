@@ -12,6 +12,8 @@ import {
   SATELLITE_FRAME_MS,
 } from '../lib/satelliteAnimation';
 
+const SURFACE_MARKER_REL_ALT = 0.006;
+
 function objectPosition(obj: SelectedObject, nowMs = Date.now()): [number, number, number] | null {
   if (!obj) return null;
 
@@ -30,10 +32,14 @@ function objectPosition(obj: SelectedObject, nowMs = Date.now()): [number, numbe
   if (obj.type === 'aircraft') {
     if (obj.data.lat == null || obj.data.lon == null) return null;
     const altitudeM = obj.data.baroAltitude ?? obj.data.geoAltitude ?? 10_000;
-    return satPos3(obj.data.lat, obj.data.lon, altitudeScale(altitudeM / 1000));
+    return satPos3(
+      obj.data.lat,
+      obj.data.lon,
+      Math.max(altitudeScale(altitudeM / 1000), SURFACE_MARKER_REL_ALT)
+    );
   }
 
-  return satPos3(obj.data.lat, obj.data.lon, altitudeScale(0.05));
+  return satPos3(obj.data.lat, obj.data.lon, SURFACE_MARKER_REL_ALT);
 }
 
 function objectColor(obj: SelectedObject): string {
@@ -41,6 +47,11 @@ function objectColor(obj: SelectedObject): string {
   if (obj.type === 'satellite') return COLORS.satellite;
   if (obj.type === 'aircraft') return COLORS.aircraft;
   return COLORS.vessel;
+}
+
+function highlightScale(obj: SelectedObject, state: 'selected' | 'hovered'): number {
+  if (obj?.type === 'satellite') return state === 'selected' ? 0.9 : 1.2;
+  return state === 'selected' ? 0.42 : 0.55;
 }
 
 function updateMarker(mesh: THREE.Mesh, obj: SelectedObject, scale: number, nowMs = Date.now()) {
@@ -103,11 +114,11 @@ export function useObjectHighlights(globeRef: RefObject<GlobeMethods | undefined
 
     const syncSelected = (obj: SelectedObject) => {
       selectedObject = obj;
-      updateMarker(selectedMesh, obj, 0.9);
+      updateMarker(selectedMesh, obj, highlightScale(obj, 'selected'));
     };
     const syncHovered = (obj: SelectedObject) => {
       hoveredObject = obj;
-      updateMarker(hoverMesh, obj, 1.2);
+      updateMarker(hoverMesh, obj, highlightScale(obj, 'hovered'));
     };
 
     const animateMarkers = (now: number) => {
@@ -117,10 +128,20 @@ export function useObjectHighlights(globeRef: RefObject<GlobeMethods | undefined
 
       const wallClockNow = Date.now();
       if (selectedObject?.type === 'satellite') {
-        updateMarker(selectedMesh, selectedObject, 0.9, wallClockNow);
+        updateMarker(
+          selectedMesh,
+          selectedObject,
+          highlightScale(selectedObject, 'selected'),
+          wallClockNow
+        );
       }
       if (hoveredObject?.type === 'satellite') {
-        updateMarker(hoverMesh, hoveredObject, 1.2, wallClockNow);
+        updateMarker(
+          hoverMesh,
+          hoveredObject,
+          highlightScale(hoveredObject, 'hovered'),
+          wallClockNow
+        );
       }
     };
 

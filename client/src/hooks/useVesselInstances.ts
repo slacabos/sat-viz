@@ -9,12 +9,57 @@ import { recordPerf, timePerf } from '../lib/perf';
 import type { VesselPosition } from '../types/vessel';
 
 const MAX_VESSELS = 50_000;
-const VESSEL_REL_ALT = altitudeScale(0.05);
+const VESSEL_REL_ALT = Math.max(altitudeScale(0.05), 0.006);
 const PICK_BOUND_RADIUS = 102;
+const DEG2RAD = Math.PI / 180;
 
 export interface VesselInstances {
   meshRef: RefObject<THREE.InstancedMesh | null>;
   dataRef: RefObject<VesselPosition[]>;
+}
+
+function writeVesselMatrix(
+  target: ArrayLike<number>,
+  offset: number,
+  lat: number,
+  lng: number,
+  headingDeg: number
+) {
+  const [x, y, z] = satPos3(lat, lng, VESSEL_REL_ALT);
+  const latRad = lat * DEG2RAD;
+  const theta = (90 - lng) * DEG2RAD;
+  const heading = headingDeg * DEG2RAD;
+
+  const up = new THREE.Vector3(x, y, z).normalize();
+  const east = new THREE.Vector3(Math.sin(theta), 0, -Math.cos(theta)).normalize();
+  const north = new THREE.Vector3(
+    -Math.sin(latRad) * Math.cos(theta),
+    Math.cos(latRad),
+    -Math.sin(latRad) * Math.sin(theta)
+  ).normalize();
+  const forward = north
+    .multiplyScalar(Math.cos(heading))
+    .add(east.multiplyScalar(Math.sin(heading)))
+    .normalize();
+  const right = new THREE.Vector3().crossVectors(up, forward).normalize();
+  const out = target as number[];
+
+  out[offset] = right.x;
+  out[offset + 1] = right.y;
+  out[offset + 2] = right.z;
+  out[offset + 3] = 0;
+  out[offset + 4] = up.x;
+  out[offset + 5] = up.y;
+  out[offset + 6] = up.z;
+  out[offset + 7] = 0;
+  out[offset + 8] = forward.x;
+  out[offset + 9] = forward.y;
+  out[offset + 10] = forward.z;
+  out[offset + 11] = 0;
+  out[offset + 12] = x;
+  out[offset + 13] = y;
+  out[offset + 14] = z;
+  out[offset + 15] = 1;
 }
 
 export function useVesselInstances(
@@ -34,8 +79,8 @@ export function useVesselInstances(
       return;
     }
 
-    const geometry = new THREE.BoxGeometry(0.5, 0.2, 0.9);
-    const pickGeometry = new THREE.SphereGeometry(1.4, 8, 6);
+    const geometry = new THREE.BoxGeometry(0.25, 0.1, 0.45);
+    const pickGeometry = new THREE.SphereGeometry(0.7, 8, 6);
     const material = new THREE.MeshLambertMaterial({ color: COLORS.vessel });
     const pickMaterial = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 });
     pickMaterial.colorWrite = false;
@@ -59,25 +104,14 @@ export function useVesselInstances(
 
         for (let i = 0; i < count; i++) {
           const vessel = vessels[i];
-          const [x, y, z] = satPos3(vessel.lat, vessel.lon, VESSEL_REL_ALT);
           const mi = i * 16;
-
-          instanceMatrix[mi] = 1;
-          instanceMatrix[mi + 1] = 0;
-          instanceMatrix[mi + 2] = 0;
-          instanceMatrix[mi + 3] = 0;
-          instanceMatrix[mi + 4] = 0;
-          instanceMatrix[mi + 5] = 1;
-          instanceMatrix[mi + 6] = 0;
-          instanceMatrix[mi + 7] = 0;
-          instanceMatrix[mi + 8] = 0;
-          instanceMatrix[mi + 9] = 0;
-          instanceMatrix[mi + 10] = 1;
-          instanceMatrix[mi + 11] = 0;
-          instanceMatrix[mi + 12] = x;
-          instanceMatrix[mi + 13] = y;
-          instanceMatrix[mi + 14] = z;
-          instanceMatrix[mi + 15] = 1;
+          writeVesselMatrix(
+            instanceMatrix,
+            mi,
+            vessel.lat,
+            vessel.lon,
+            vessel.heading ?? vessel.cog ?? 0
+          );
           pickInstanceMatrix.set(instanceMatrix.subarray(mi, mi + 16), mi);
 
           dataRef.current.push(vessel);
