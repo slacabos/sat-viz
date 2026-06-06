@@ -2,6 +2,69 @@ import { useAppStore } from '../store/useAppStore';
 import type { SatellitePosition } from '../types/satellite';
 import type { AircraftState } from '../types/aircraft';
 import type { VesselPosition } from '../types/vessel';
+import { useAircraftFlight } from '../hooks/useAircraftFlight';
+
+const AIRLINE_CODES: Record<string, string> = {
+  // North America
+  AAL: 'American Airlines',
+  UAL: 'United Airlines',
+  DAL: 'Delta Air Lines',
+  SWA: 'Southwest Airlines',
+  ASA: 'Alaska Airlines',
+  JBU: 'JetBlue Airways',
+  FFT: 'Frontier Airlines',
+  NKS: 'Spirit Airlines',
+  HAL: 'Hawaiian Airlines',
+  SKW: 'SkyWest Airlines',
+  // Europe
+  BAW: 'British Airways',
+  DLH: 'Lufthansa',
+  AFR: 'Air France',
+  KLM: 'KLM Royal Dutch Airlines',
+  IBE: 'Iberia',
+  AZA: 'ITA Airways',
+  VLG: 'Vueling',
+  EZY: 'easyJet',
+  RYR: 'Ryanair',
+  THY: 'Turkish Airlines',
+  SAS: 'Scandinavian Airlines',
+  FIN: 'Finnair',
+  // Middle East & Africa
+  UAE: 'Emirates',
+  ETD: 'Etihad Airways',
+  QTR: 'Qatar Airways',
+  SVA: 'Saudia',
+  ELY: 'El Al',
+  ETH: 'Ethiopian Airlines',
+  KQA: 'Kenya Airways',
+  // Asia-Pacific
+  CCA: 'Air China',
+  CSN: 'China Southern',
+  CES: 'China Eastern',
+  JAL: 'Japan Airlines',
+  ANA: 'All Nippon Airways',
+  KAL: 'Korean Air',
+  AAR: 'Asiana Airlines',
+  SIA: 'Singapore Airlines',
+  MAS: 'Malaysia Airlines',
+  THA: 'Thai Airways',
+  PAL: 'Philippine Airlines',
+  GIA: 'Garuda Indonesia',
+  QFA: 'Qantas',
+  // Latin America
+  TAM: 'LATAM Airlines',
+  GLO: 'GOL Linhas Aéreas',
+  VOI: 'Volaris',
+  AVM: 'Avianca',
+  // Cargo
+  FDX: 'FedEx Express',
+  UPS: 'UPS Airlines',
+};
+
+function getAirlineName(callsign: string | null): string | null {
+  if (!callsign || callsign.trim().length < 3) return null;
+  return AIRLINE_CODES[callsign.trim().slice(0, 3).toUpperCase()] ?? null;
+}
 
 const SHIP_TYPES: Record<number, string> = {
   20: 'Wing in Ground',
@@ -89,9 +152,13 @@ function AircraftPanel({ data }: { data: AircraftState }) {
     data.baroAltitude != null ? Math.round(data.baroAltitude * 3.28084).toLocaleString() : null;
   const speedKts =
     data.velocity != null ? Math.round(data.velocity * 1.944).toLocaleString() : null;
+  const airline = getAirlineName(data.callsign);
+  const { data: flight, loading: flightLoading } = useAircraftFlight(data.icao24);
   return (
     <>
       <Row label="ICAO24" value={data.icao24.toUpperCase()} />
+      {data.callsign && <Row label="Flight" value={data.callsign.trim()} />}
+      {airline && <Row label="Airline" value={airline} />}
       <Row label="Country" value={data.originCountry} />
       <Row label="Altitude" value={altFt ? `${altFt} ft` : null} />
       <Row label="Speed" value={speedKts ? `${speedKts} kts` : null} />
@@ -107,6 +174,8 @@ function AircraftPanel({ data }: { data: AircraftState }) {
             : null
         }
       />
+      <Row label="From" value={flightLoading ? '…' : (flight?.departureAirport ?? null)} />
+      <Row label="To" value={flightLoading ? '…' : (flight?.arrivalAirport ?? null)} />
     </>
   );
 }

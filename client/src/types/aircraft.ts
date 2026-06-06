@@ -11,3 +11,8 @@ export interface AircraftState {
   verticalRate: number | null;
   geoAltitude: number | null;
 }
+
+export interface FlightInfo {
+  departureAirport: string | null;
+  arrivalAirport: string | null;
+}

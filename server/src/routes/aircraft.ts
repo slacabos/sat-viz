@@ -55,8 +55,23 @@ async function getToken(): Promise<string | null> {
   return tokenCache.token;
 }
 
+interface FlightInfo {
+  departureAirport: string | null;
+  arrivalAirport: string | null;
+}
+
+interface OpenSkyFlight {
+  icao24: string;
+  firstSeen: number;
+  estDepartureAirport: string | null;
+  lastSeen: number;
+  estArrivalAirport: string | null;
+}
+
 const dataCache = new Map<string, Cache>();
 const CACHE_TTL_MS = 12_000;
+const flightCache = new Map<string, { data: FlightInfo; timestamp: number }>();
+const FLIGHT_CACHE_TTL_MS = 5 * 60_000;
 const BOUNDS_KEYS = ['lamin', 'lamax', 'lomin', 'lomax'] as const;
 
 function mapState(s: unknown[]): AircraftState {
@@ -82,6 +97,67 @@ async function fetchUpstream(params: URLSearchParams, token: string | null) {
     signal: AbortSignal.timeout(10_000),
   });
 }
+
+aircraftRouter.get('/:icao24/flight', async (req: Request, res: Response) => {
+  const icao24 = String(req.params.icao24 ?? '').toLowerCase();
+  if (!icao24 || !/^[0-9a-f]{6}$/.test(icao24)) {
+    res.status(400).json({ error: 'Invalid icao24' });
+    return;
+  }
+
+  const now = Date.now();
+  const cached = flightCache.get(icao24);
+  if (cached && now - cached.timestamp < FLIGHT_CACHE_TTL_MS) {
+    res.setHeader('X-Cached', 'true');
+    res.json(cached.data);
+    return;
+  }
+
+  const end = Math.floor(now / 1000);
+  const begin = end - 86400;
+  const params = new URLSearchParams({ icao24, begin: String(begin), end: String(end) });
+  const url = `https://opensky-network.org/api/flights/aircraft?${params}`;
+
+  try {
+    const token = await getToken();
+    const upstream = await fetch(url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (upstream.status === 404 || upstream.status === 204) {
+      const result: FlightInfo = { departureAirport: null, arrivalAirport: null };
+      flightCache.set(icao24, { data: result, timestamp: now });
+      res.json(result);
+      return;
+    }
+
+    if (!upstream.ok) {
+      res.status(upstream.status).json({ error: 'OpenSky error' });
+      return;
+    }
+
+    const flights = (await upstream.json()) as OpenSkyFlight[];
+
+    if (!Array.isArray(flights) || flights.length === 0) {
+      const result: FlightInfo = { departureAirport: null, arrivalAirport: null };
+      flightCache.set(icao24, { data: result, timestamp: now });
+      res.json(result);
+      return;
+    }
+
+    flights.sort((a, b) => b.lastSeen - a.lastSeen);
+    const latest = flights[0];
+    const result: FlightInfo = {
+      departureAirport: latest.estDepartureAirport ?? null,
+      arrivalAirport: latest.estArrivalAirport ?? null,
+    };
+    flightCache.set(icao24, { data: result, timestamp: now });
+    res.json(result);
+  } catch {
+    res.json({ departureAirport: null, arrivalAirport: null });
+  }
+});
 
 aircraftRouter.get('/', async (req: Request, res: Response) => {
   const now = Date.now();
