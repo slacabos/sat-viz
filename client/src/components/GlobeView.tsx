@@ -7,8 +7,9 @@ import { useSatelliteInstances } from '../hooks/useSatelliteInstances';
 import { useVesselInstances } from '../hooks/useVesselInstances';
 import { useAircraftInstances } from '../hooks/useAircraftInstances';
 import { useObjectHighlights } from '../hooks/useObjectHighlights';
-import { classifyOrbit } from '../lib/altitudeScale';
+import { classifyOrbit, altitudeScale } from '../lib/altitudeScale';
 import { buildSatelliteOrbitPath } from '../lib/satelliteOrbitPath';
+import { MIN_AIRCRAFT_REL_ALT } from '../lib/surfaceObjectPosition';
 
 function addPickTarget(targets: THREE.Object3D[], mesh: THREE.InstancedMesh | null) {
   if (mesh && mesh.visible && mesh.count > 0) targets.push(mesh);
@@ -79,7 +80,9 @@ const GlobeView = memo(function GlobeView() {
     const { lat, lon } = selectedObject.data;
     if (lat == null || lon == null) return [];
 
-    const mid = { lat, lng: lon, alt: 0.02 };
+    const altM = selectedObject.data.baroAltitude ?? selectedObject.data.geoAltitude ?? 10_000;
+    const relAlt = Math.max(altitudeScale(altM / 1000), MIN_AIRCRAFT_REL_ALT);
+    const mid = { lat, lng: lon, alt: relAlt };
     const pts: { lat: number; lng: number; alt: number }[] = [];
     if (selectedFlightInfo?.departureLat != null) {
       pts.push({
