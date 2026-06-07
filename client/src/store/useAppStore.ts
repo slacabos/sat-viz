@@ -103,7 +103,25 @@ export const useAppStore = create<AppState>((set) => {
     setSatelliteTles: (data) => set({ satelliteTlesById: data }),
     setAircraft: (data) => {
       recordPerf('aircraft.store.count', data.length);
-      set({ aircraft: data });
+      set((state) => {
+        const byIcao = new Map(data.map((aircraft) => [aircraft.icao24, aircraft]));
+        const selectedObject =
+          state.selectedObject?.type === 'aircraft'
+            ? {
+                type: 'aircraft' as const,
+                data: byIcao.get(state.selectedObject.data.icao24) ?? state.selectedObject.data,
+              }
+            : state.selectedObject;
+        const hoveredObject =
+          state.hoveredObject?.type === 'aircraft'
+            ? {
+                type: 'aircraft' as const,
+                data: byIcao.get(state.hoveredObject.data.icao24) ?? state.hoveredObject.data,
+              }
+            : state.hoveredObject;
+
+        return { aircraft: data, selectedObject, hoveredObject };
+      });
     },
     bulkUpsertVessels: (data) => {
       timePerf('vessels.store.upsertMs', () => {
@@ -115,7 +133,25 @@ export const useAppStore = create<AppState>((set) => {
           if (v.lastUpdate < tenMinAgo) vesselMap.delete(mmsi);
         }
         recordPerf('vessels.store.count', vesselMap.size);
-        set({ vessels: Array.from(vesselMap.values()) });
+        const vessels = Array.from(vesselMap.values());
+        set((state) => {
+          const selectedObject =
+            state.selectedObject?.type === 'vessel'
+              ? {
+                  type: 'vessel' as const,
+                  data: vesselMap.get(state.selectedObject.data.mmsi) ?? state.selectedObject.data,
+                }
+              : state.selectedObject;
+          const hoveredObject =
+            state.hoveredObject?.type === 'vessel'
+              ? {
+                  type: 'vessel' as const,
+                  data: vesselMap.get(state.hoveredObject.data.mmsi) ?? state.hoveredObject.data,
+                }
+              : state.hoveredObject;
+
+          return { vessels, selectedObject, hoveredObject };
+        });
       });
     },
     clearVessels: () => {

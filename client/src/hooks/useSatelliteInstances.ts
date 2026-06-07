@@ -17,6 +17,8 @@ import type { SatellitePosition } from '../types/satellite';
 const MAX_SATS = 12000;
 const CULL_THROTTLE_MS = 100;
 const PICK_BOUND_RADIUS = 120;
+const SATELLITE_VISUAL_RADIUS = 0.4 * (2 / 3);
+const SATELLITE_PICK_RADIUS = 1.35 * (2 / 3);
 // Cull satellites whose normalized direction has a dot product below this threshold
 // with the camera direction. -0.1 preserves near-horizon satellites to avoid pop-in.
 const CULL_THRESHOLD = -0.1;
@@ -72,8 +74,8 @@ export function useSatelliteInstances(
     // Capture in a local const so closures below always have a non-nullable reference
     const group = globeGroup;
 
-    const geo = new THREE.SphereGeometry(0.4, 6, 4);
-    const pickGeo = new THREE.SphereGeometry(1.35, 8, 6);
+    const geo = new THREE.SphereGeometry(SATELLITE_VISUAL_RADIUS, 6, 4);
+    const pickGeo = new THREE.SphereGeometry(SATELLITE_PICK_RADIUS, 8, 6);
     const makePickMaterial = () => {
       const material = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 });
       material.colorWrite = false;

@@ -1,6 +1,24 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { useAppStore } from '../store/useAppStore';
+import type { AircraftState } from '../types/aircraft';
 import type { VesselPosition } from '../types/vessel';
+
+function makeAircraft(icao24: string, overrides: Partial<AircraftState> = {}): AircraftState {
+  return {
+    icao24,
+    callsign: null,
+    originCountry: 'United Kingdom',
+    lon: -0.1,
+    lat: 51.5,
+    baroAltitude: 10_000,
+    onGround: false,
+    velocity: 200,
+    trueTrack: 90,
+    verticalRate: 0,
+    geoAltitude: null,
+    ...overrides,
+  };
+}
 
 function makeVessel(mmsi: string, overrides: Partial<VesselPosition> = {}): VesselPosition {
   return {
@@ -71,6 +89,8 @@ describe('useAppStore — selected orbit', () => {
 describe('useAppStore — bulkUpsertVessels', () => {
   beforeEach(() => {
     useAppStore.getState().clearVessels();
+    useAppStore.getState().setSelectedObject(null);
+    useAppStore.getState().setHoveredObject(null);
   });
 
   it('adds new vessels', () => {
@@ -94,5 +114,55 @@ describe('useAppStore — bulkUpsertVessels', () => {
     const vessels = useAppStore.getState().vessels;
     expect(vessels.find((v) => v.mmsi === 'old')).toBeUndefined();
     expect(vessels.find((v) => v.mmsi === 'new')).toBeDefined();
+  });
+
+  it('refreshes selected and hovered vessels by MMSI', () => {
+    const selected = makeVessel('111', { lat: 1 });
+    const hovered = makeVessel('222', { lat: 2 });
+
+    useAppStore.getState().bulkUpsertVessels([selected, hovered]);
+    useAppStore.getState().setSelectedObject({ type: 'vessel', data: selected });
+    useAppStore.getState().setHoveredObject({ type: 'vessel', data: hovered });
+    useAppStore
+      .getState()
+      .bulkUpsertVessels([makeVessel('111', { lat: 11 }), makeVessel('222', { lat: 22 })]);
+
+    expect(useAppStore.getState().selectedObject).toMatchObject({
+      type: 'vessel',
+      data: { mmsi: '111', lat: 11 },
+    });
+    expect(useAppStore.getState().hoveredObject).toMatchObject({
+      type: 'vessel',
+      data: { mmsi: '222', lat: 22 },
+    });
+  });
+});
+
+describe('useAppStore — setAircraft', () => {
+  beforeEach(() => {
+    useAppStore.getState().setAircraft([]);
+    useAppStore.getState().setSelectedObject(null);
+    useAppStore.getState().setHoveredObject(null);
+  });
+
+  it('refreshes selected and hovered aircraft by ICAO24', () => {
+    const selected = makeAircraft('abc123', { lat: 1 });
+    const hovered = makeAircraft('def456', { lat: 2 });
+
+    useAppStore.getState().setAircraft([selected, hovered]);
+    useAppStore.getState().setSelectedObject({ type: 'aircraft', data: selected });
+    useAppStore.getState().setHoveredObject({ type: 'aircraft', data: hovered });
+    useAppStore
+      .getState()
+      .setAircraft([makeAircraft('abc123', { lat: 11 }), makeAircraft('def456', { lat: 22 })]);
+
+    expect(useAppStore.getState().selectedObject).toMatchObject({
+      type: 'aircraft',
+      data: { icao24: 'abc123', lat: 11 },
+    });
+    expect(useAppStore.getState().hoveredObject).toMatchObject({
+      type: 'aircraft',
+      data: { icao24: 'def456', lat: 22 },
+    });
   });
 });
