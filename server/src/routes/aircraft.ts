@@ -80,7 +80,7 @@ const FLIGHT_CACHE_TTL_MS = 30 * 60_000;
 
 function getAirportCoords(icao: string | null): { lat: number; lon: number } | null {
   if (!icao) return null;
-  const entry = AIRPORTS[icao.toUpperCase()];
+  const entry = AIRPORTS[icao.trim().toUpperCase()];
   return entry ? { lat: entry[0], lon: entry[1] } : null;
 }
 const BOUNDS_KEYS = ['lamin', 'lamax', 'lomin', 'lomax'] as const;
