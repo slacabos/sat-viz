@@ -7,9 +7,10 @@ import { useSatelliteInstances } from '../hooks/useSatelliteInstances';
 import { useVesselInstances } from '../hooks/useVesselInstances';
 import { useAircraftInstances } from '../hooks/useAircraftInstances';
 import { useObjectHighlights } from '../hooks/useObjectHighlights';
-import { classifyOrbit, altitudeScale } from '../lib/altitudeScale';
+import { classifyOrbit } from '../lib/altitudeScale';
 import { buildSatelliteOrbitPath } from '../lib/satelliteOrbitPath';
-import { MIN_AIRCRAFT_REL_ALT } from '../lib/surfaceObjectPosition';
+import { aircraftSurfacePosition } from '../lib/surfaceObjectPosition';
+import { COLORS } from '../lib/colorConfig';
 
 function addPickTarget(targets: THREE.Object3D[], mesh: THREE.InstancedMesh | null) {
   if (mesh && mesh.visible && mesh.count > 0) targets.push(mesh);
@@ -72,7 +73,7 @@ const GlobeView = memo(function GlobeView() {
       satelliteTlesById[selectedObject.data.id],
       Date.now()
     );
-    return path ? [path] : [];
+    return path ? [{ ...path, color: COLORS.satellite }] : [];
   }, [layers.satellites, satelliteOrbits, satelliteTlesById, selectedObject, showSelectedOrbit]);
 
   const selectedFlightPath = useMemo(() => {
@@ -80,8 +81,7 @@ const GlobeView = memo(function GlobeView() {
     const { lat, lon } = selectedObject.data;
     if (lat == null || lon == null) return [];
 
-    const altM = selectedObject.data.baroAltitude ?? selectedObject.data.geoAltitude ?? 10_000;
-    const relAlt = Math.max(altitudeScale(altM / 1000), MIN_AIRCRAFT_REL_ALT);
+    const relAlt = aircraftSurfacePosition(selectedObject.data)?.relAlt ?? 0;
     const mid = { lat, lng: lon, alt: relAlt };
     const pts: { lat: number; lng: number; alt: number }[] = [];
     if (selectedFlightInfo?.departureLat != null) {
@@ -96,14 +96,11 @@ const GlobeView = memo(function GlobeView() {
       pts.push({ lat: selectedFlightInfo.arrivalLat, lng: selectedFlightInfo.arrivalLon!, alt: 0 });
     }
     if (pts.length < 2) return [];
-    return [{ _pt: 'flight' as const, id: `flight-${selectedObject.data.icao24}`, points: pts }];
+    return [{ color: COLORS.aircraft, id: `flight-${selectedObject.data.icao24}`, points: pts }];
   }, [selectedObject, selectedFlightInfo, showSelectedOrbit]);
 
   const allPaths = useMemo(
-    () => [
-      ...selectedOrbitPath.map((p) => ({ ...p, _pt: 'satellite' as const })),
-      ...selectedFlightPath,
-    ],
+    () => [...selectedOrbitPath, ...selectedFlightPath],
     [selectedOrbitPath, selectedFlightPath]
   );
 
@@ -273,7 +270,7 @@ const GlobeView = memo(function GlobeView() {
         pathPointLat="lat"
         pathPointLng="lng"
         pathPointAlt="alt"
-        pathColor={(p: object) => ((p as { _pt: string })._pt === 'flight' ? '#f59e0b' : '#67e8f9')}
+        pathColor="color"
         pathStroke={0.38}
         pathResolution={1}
         pathTransitionDuration={0}

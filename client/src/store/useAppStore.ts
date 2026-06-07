@@ -162,7 +162,7 @@ export const useAppStore = create<AppState>((set) => {
     },
 
     selectedObject: null,
-    setSelectedObject: (obj) => set({ selectedObject: obj }),
+    setSelectedObject: (obj) => set({ selectedObject: obj, selectedFlightInfo: null }),
     hoveredObject: null,
     setHoveredObject: (obj) => set({ hoveredObject: obj }),
     selectedFlightInfo: null,

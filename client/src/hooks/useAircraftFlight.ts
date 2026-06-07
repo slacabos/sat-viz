@@ -15,7 +15,6 @@ export function useAircraftFlight(icao24: string | null) {
     abortRef.current = controller;
 
     async function fetchFlight() {
-      setSelectedFlightInfo(null);
       try {
         const resp = await fetch(`/api/aircraft/${icao24!.toLowerCase()}/flight`, {
           signal: controller.signal,
@@ -32,5 +31,5 @@ export function useAircraftFlight(icao24: string | null) {
     fetchFlight();
 
     return () => controller.abort();
-  }, [icao24, setSelectedFlightInfo]);
+  }, [icao24]);
 }
