@@ -255,7 +255,7 @@ export function GlobeControls() {
       />
       <IconBtn
         icon="⎌"
-        label={showSelectedOrbit ? 'Hide selected orbit' : 'Show selected orbit'}
+        label={showSelectedOrbit ? 'Hide selected path' : 'Show selected path'}
         active={showSelectedOrbit}
         color="#22d3ee"
         onClick={toggleSelectedOrbit}

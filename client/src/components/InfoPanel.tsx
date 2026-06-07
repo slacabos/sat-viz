@@ -153,7 +153,8 @@ function AircraftPanel({ data }: { data: AircraftState }) {
   const speedKts =
     data.velocity != null ? Math.round(data.velocity * 1.944).toLocaleString() : null;
   const airline = getAirlineName(data.callsign);
-  const { data: flight, loading: flightLoading } = useAircraftFlight(data.icao24);
+  useAircraftFlight(data.icao24);
+  const flight = useAppStore((s) => s.selectedFlightInfo);
   return (
     <>
       <Row label="ICAO24" value={data.icao24.toUpperCase()} />
@@ -174,8 +175,8 @@ function AircraftPanel({ data }: { data: AircraftState }) {
             : null
         }
       />
-      <Row label="From" value={flightLoading ? '…' : (flight?.departureAirport ?? null)} />
-      <Row label="To" value={flightLoading ? '…' : (flight?.arrivalAirport ?? null)} />
+      <Row label="From" value={flight === null ? '…' : (flight.departureAirport ?? null)} />
+      <Row label="To" value={flight === null ? '…' : (flight.arrivalAirport ?? null)} />
     </>
   );
 }

@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
+import { useAppStore } from '../store/useAppStore';
 import type { FlightInfo } from '../types/aircraft';
 
 export function useAircraftFlight(icao24: string | null) {
-  const [data, setData] = useState<FlightInfo | null>(null);
-  const [loading, setLoading] = useState(false);
+  const setSelectedFlightInfo = useAppStore((s) => s.setSelectedFlightInfo);
   const abortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
@@ -15,27 +15,22 @@ export function useAircraftFlight(icao24: string | null) {
     abortRef.current = controller;
 
     async function fetchFlight() {
-      setData(null);
-      setLoading(true);
+      setSelectedFlightInfo(null);
       try {
         const resp = await fetch(`/api/aircraft/${icao24!.toLowerCase()}/flight`, {
           signal: controller.signal,
         });
         if (resp.ok) {
           const body = (await resp.json()) as FlightInfo;
-          setData(body);
+          setSelectedFlightInfo(body);
         }
       } catch (err: unknown) {
         if (err instanceof Error && err.name === 'AbortError') return;
-      } finally {
-        if (!controller.signal.aborted) setLoading(false);
       }
     }
 
     fetchFlight();
 
     return () => controller.abort();
-  }, [icao24]);
-
-  return { data, loading };
+  }, [icao24, setSelectedFlightInfo]);
 }

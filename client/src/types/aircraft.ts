@@ -15,4 +15,8 @@ export interface AircraftState {
 export interface FlightInfo {
   departureAirport: string | null;
   arrivalAirport: string | null;
+  departureLat: number | null;
+  departureLon: number | null;
+  arrivalLat: number | null;
+  arrivalLon: number | null;
 }

@@ -58,6 +58,10 @@ async function getToken(): Promise<string | null> {
 interface FlightInfo {
   departureAirport: string | null;
   arrivalAirport: string | null;
+  departureLat: number | null;
+  departureLon: number | null;
+  arrivalLat: number | null;
+  arrivalLon: number | null;
 }
 
 interface OpenSkyFlight {
@@ -71,7 +75,38 @@ interface OpenSkyFlight {
 const dataCache = new Map<string, Cache>();
 const CACHE_TTL_MS = 12_000;
 const flightCache = new Map<string, { data: FlightInfo; timestamp: number }>();
-const FLIGHT_CACHE_TTL_MS = 5 * 60_000;
+const FLIGHT_CACHE_TTL_MS = 30 * 60_000;
+
+const AIRPORT_CACHE_TTL_MS = 7 * 24 * 60 * 60_000;
+const airportCache = new Map<string, { coords: { lat: number; lon: number } | null; timestamp: number }>();
+
+async function fetchAirportCoords(
+  icao: string | null,
+  token: string | null
+): Promise<{ lat: number; lon: number } | null> {
+  if (!icao) return null;
+  const cached = airportCache.get(icao);
+  if (cached && Date.now() - cached.timestamp < AIRPORT_CACHE_TTL_MS) return cached.coords;
+  try {
+    const url = `https://opensky-network.org/api/airports/?icao=${encodeURIComponent(icao)}`;
+    const resp = await fetch(url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      signal: AbortSignal.timeout(5_000),
+    });
+    if (!resp.ok) {
+      airportCache.set(icao, { coords: null, timestamp: Date.now() });
+      return null;
+    }
+    const data = (await resp.json()) as { lat?: number; lon?: number };
+    const coords =
+      data.lat != null && data.lon != null ? { lat: data.lat, lon: data.lon } : null;
+    airportCache.set(icao, { coords, timestamp: Date.now() });
+    return coords;
+  } catch {
+    airportCache.set(icao, { coords: null, timestamp: Date.now() });
+    return null;
+  }
+}
 const BOUNDS_KEYS = ['lamin', 'lamax', 'lomin', 'lomax'] as const;
 
 function mapState(s: unknown[]): AircraftState {
@@ -126,7 +161,7 @@ aircraftRouter.get('/:icao24/flight', async (req: Request, res: Response) => {
     });
 
     if (upstream.status === 404 || upstream.status === 204) {
-      const result: FlightInfo = { departureAirport: null, arrivalAirport: null };
+      const result: FlightInfo = { departureAirport: null, arrivalAirport: null, departureLat: null, departureLon: null, arrivalLat: null, arrivalLon: null };
       flightCache.set(icao24, { data: result, timestamp: now });
       res.json(result);
       return;
@@ -140,7 +175,7 @@ aircraftRouter.get('/:icao24/flight', async (req: Request, res: Response) => {
     const flights = (await upstream.json()) as OpenSkyFlight[];
 
     if (!Array.isArray(flights) || flights.length === 0) {
-      const result: FlightInfo = { departureAirport: null, arrivalAirport: null };
+      const result: FlightInfo = { departureAirport: null, arrivalAirport: null, departureLat: null, departureLon: null, arrivalLat: null, arrivalLon: null };
       flightCache.set(icao24, { data: result, timestamp: now });
       res.json(result);
       return;
@@ -148,14 +183,22 @@ aircraftRouter.get('/:icao24/flight', async (req: Request, res: Response) => {
 
     flights.sort((a, b) => b.lastSeen - a.lastSeen);
     const latest = flights[0];
+    const [depCoords, arrCoords] = await Promise.all([
+      fetchAirportCoords(latest.estDepartureAirport ?? null, token),
+      fetchAirportCoords(latest.estArrivalAirport ?? null, token),
+    ]);
     const result: FlightInfo = {
       departureAirport: latest.estDepartureAirport ?? null,
       arrivalAirport: latest.estArrivalAirport ?? null,
+      departureLat: depCoords?.lat ?? null,
+      departureLon: depCoords?.lon ?? null,
+      arrivalLat: arrCoords?.lat ?? null,
+      arrivalLon: arrCoords?.lon ?? null,
     };
     flightCache.set(icao24, { data: result, timestamp: now });
     res.json(result);
   } catch {
-    res.json({ departureAirport: null, arrivalAirport: null });
+    res.json({ departureAirport: null, arrivalAirport: null, departureLat: null, departureLon: null, arrivalLat: null, arrivalLon: null });
   }
 });
 

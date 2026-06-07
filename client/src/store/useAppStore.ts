@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import type { SatellitePosition, SatelliteTleIndex } from '../types/satellite';
-import type { AircraftState } from '../types/aircraft';
+import type { AircraftState, FlightInfo } from '../types/aircraft';
 import type { VesselPosition } from '../types/vessel';
 import { recordPerf, timePerf } from '../lib/perf';
 import type { OrbitClass } from '../lib/altitudeScale';
@@ -42,6 +42,8 @@ interface AppState {
   setSelectedObject: (obj: SelectedObject) => void;
   hoveredObject: SelectedObject;
   setHoveredObject: (obj: SelectedObject) => void;
+  selectedFlightInfo: FlightInfo | null;
+  setSelectedFlightInfo: (info: FlightInfo | null) => void;
 
   lastUpdated: { satellites: number | null; aircraft: number | null; vessels: number | null };
   setLastUpdated: (layer: 'satellites' | 'aircraft' | 'vessels', ts: number) => void;
@@ -163,6 +165,8 @@ export const useAppStore = create<AppState>((set) => {
     setSelectedObject: (obj) => set({ selectedObject: obj }),
     hoveredObject: null,
     setHoveredObject: (obj) => set({ hoveredObject: obj }),
+    selectedFlightInfo: null,
+    setSelectedFlightInfo: (info) => set({ selectedFlightInfo: info }),
 
     lastUpdated: { satellites: null, aircraft: null, vessels: null },
     setLastUpdated: (layer, ts) => set((s) => ({ lastUpdated: { ...s.lastUpdated, [layer]: ts } })),

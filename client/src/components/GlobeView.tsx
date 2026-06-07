@@ -35,6 +35,7 @@ const GlobeView = memo(function GlobeView() {
   const showBorders = useAppStore((s) => s.showBorders);
   const selectedObject = useAppStore((s) => s.selectedObject);
   const showSelectedOrbit = useAppStore((s) => s.showSelectedOrbit);
+  const selectedFlightInfo = useAppStore((s) => s.selectedFlightInfo);
   const satelliteTlesById = useAppStore((s) => s.satelliteTlesById);
   const layers = useAppStore((s) => s.layers);
   const satelliteOrbits = useAppStore((s) => s.satelliteOrbits);
@@ -72,6 +73,36 @@ const GlobeView = memo(function GlobeView() {
     );
     return path ? [path] : [];
   }, [layers.satellites, satelliteOrbits, satelliteTlesById, selectedObject, showSelectedOrbit]);
+
+  const selectedFlightPath = useMemo(() => {
+    if (!showSelectedOrbit || selectedObject?.type !== 'aircraft') return [];
+    const { lat, lon } = selectedObject.data;
+    if (lat == null || lon == null) return [];
+
+    const mid = { lat, lng: lon, alt: 0.02 };
+    const pts: { lat: number; lng: number; alt: number }[] = [];
+    if (selectedFlightInfo?.departureLat != null) {
+      pts.push({
+        lat: selectedFlightInfo.departureLat,
+        lng: selectedFlightInfo.departureLon!,
+        alt: 0,
+      });
+    }
+    pts.push(mid);
+    if (selectedFlightInfo?.arrivalLat != null) {
+      pts.push({ lat: selectedFlightInfo.arrivalLat, lng: selectedFlightInfo.arrivalLon!, alt: 0 });
+    }
+    if (pts.length < 2) return [];
+    return [{ _pt: 'flight' as const, id: `flight-${selectedObject.data.icao24}`, points: pts }];
+  }, [selectedObject, selectedFlightInfo, showSelectedOrbit]);
+
+  const allPaths = useMemo(
+    () => [
+      ...selectedOrbitPath.map((p) => ({ ...p, _pt: 'satellite' as const })),
+      ...selectedFlightPath,
+    ],
+    [selectedOrbitPath, selectedFlightPath]
+  );
 
   // Resize observer
   useEffect(() => {
@@ -234,12 +265,12 @@ const GlobeView = memo(function GlobeView() {
           showBorders ? '#2a4a6b' : mapStyle === 'dark' ? '#0d1b2e' : 'transparent'
         }
         polygonAltitude={0.002}
-        pathsData={selectedOrbitPath}
+        pathsData={allPaths}
         pathPoints="points"
         pathPointLat="lat"
         pathPointLng="lng"
         pathPointAlt="alt"
-        pathColor={() => '#67e8f9'}
+        pathColor={(p: object) => ((p as { _pt: string })._pt === 'flight' ? '#f59e0b' : '#67e8f9')}
         pathStroke={0.38}
         pathResolution={1}
         pathTransitionDuration={0}
